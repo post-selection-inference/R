@@ -29,14 +29,14 @@ source("utilities.R")
 
 # Sample setup
 opt <- NULL
-opt$xmat <- "a"			# sample setup
-opt$nrow <- 200		# sample size
-opt$ncol <- 15			# number of covariates
-opt$maxk <- 5			# max model size
+opt$xmat <- "a"				# sample setup
+opt$nrow <- 200				# sample size
+opt$ncol <- 15				# number of covariates
+opt$maxk <- 5					# max model size
 opt$seed_beta <- 123	# random seed for X, beta
 opt$seed_eps <- 100		# random seed for error
 opt$conf_level <- .95	# confidence level
-opt$nboot <- 200		# bootstrap sample size
+opt$nboot <- 200			# bootstrap sample size
 opt$method <- "fs"		# model selection method
 
 # Generate sample
@@ -64,7 +64,7 @@ posi_ret <- posi(posi_fit, M)
 # Berk
 ## it might take a while
 berk_fit <- maxt_posi(xx, yy, maxk = opt$maxk, sandwich = FALSE, 
-											alpha = 1-opt$conf_level, Nboot = opt$nboot)
+	alpha = 1-opt$conf_level, Nboot = opt$nboot)
 berk_ret <- posi(berk_fit, M, sigma = 1)		# assume sigma to be known here
 
 ```
