@@ -1,23 +1,23 @@
 ## Welcome to PoSI site
 
-This page is to demonstrate simulations comparing the assumption-lean PoSI with various post-selection inference methods. Details will be updated soon on [Valid Post-selection Inference in Assumption-lean Linear Regression](https://arxiv.org/abs/1806.04119). Our package will be also up soon.
+This page is to demonstrate simulations comparing the assumption-lean PoSI with various post-selection inference methods. Please [download](https://github.com/post-selection-inference/R/archive/master.zip) or clone this repo and install the packages if necessary. Details of the simulation setup will be updated soon on [Valid Post-selection Inference in Assumption-lean Linear Regression](https://arxiv.org/abs/1806.04119). Our package will be also up soon.
 
 ### Sample generation scheme
 
 The following code generates samples using setup specified in `opt`. 
 
-| Parameter | Description 												| 
+| Parameter | Description        												| 
 | --------- | ------------------------------------------------------ 	| 
-| xmat		| Sample setup                                             	|
-|           | `a`: orthogonal design; `b`: exchangeable design; `c`: worst-case design                           |
-| nrow		| Sample size												|
-| ncol		| Number of covariates 										|
-| maxk 		| Maximum model size 										|
-| seed_beta | Random seed for X 										|
-| seed_eps  | Random seed for error										|
-| conf_level| Confidence level 											| 
-| nboot 	| Bootstrap sample size										| 
-| method 	| Model selection methods 									|
+| xmat		  | Sample setup                              |
+|           | `a`: orthogonal design; `b`: exchangeable design; `c`: worst-case design |
+| nrow		  | Sample size												        |
+| ncol		  | Number of covariates 										  |
+| maxk      | Maximum model size                        |
+| seed_beta | Random seed for X 										    |
+| seed_eps  | Random seed for error								   		|
+| conf_level| Confidence level 											    | 
+| nboot     | Bootstrap sample size									  	| 
+| method 	  | Model selection methods 									|
 |           | `fs`: forward selection; `lar`: LARS; `bic`: model with the smallest BIC | 
 
 
