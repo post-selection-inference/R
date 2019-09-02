@@ -26,6 +26,8 @@ library(pracma)
 library(matrixStats)
 
 source("utilities.R")
+# This file contains the functions Generate()
+# and fixedx_posi().
 
 # Sample setup
 opt <- NULL
