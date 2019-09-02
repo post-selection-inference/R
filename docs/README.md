@@ -12,15 +12,15 @@ The above mentioned paper provides valid confidence regions post-variable select
 
 The reason for calling this the target of <a href="https://www.codecogs.com/eqnedit.php?latex=\hat{\beta}_{M}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat{\beta}_{M}" title="\hat{\beta}_{M}" /></a> is shown in the paper. For the case of fixed covariates, the expectation is only with respect to $Y_i$'s.
 
-The proposed confidence regions for $\beta_{\hat{M}}$ for a randomly selected model $\hat{M}$ (in case of fixed covariates) is given by
-\[
-\hat{\mathcal{R}}_{n,\hat{M}} := \left\{\theta\in\mathbb{R}^{|\hat{M}|}:\,\|\hat{\Sigma}_{n,\hat{M}}(\hat{\beta}_{n,\hat{M}} - \theta)\|_{\infty} \le C_n^{\Gamma}(\alpha)\right\},
-\] 
+The proposed confidence regions for <a href="https://www.codecogs.com/eqnedit.php?latex=\beta_{\hat{M}}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\beta_{\hat{M}}" title="\beta_{\hat{M}}" /></a> for a randomly selected model <a href="https://www.codecogs.com/eqnedit.php?latex=\hat{M}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat{M}" title="\hat{M}" /></a> (in case of fixed covariates) is given by
+
+<a href="https://www.codecogs.com/eqnedit.php?latex=\hat{\mathcal{R}}_{n,\hat{M}}&space;:=&space;\left\{\theta\in\mathbb{R}^{|\hat{M}|}:\,\|\hat{\Sigma}_{n,\hat{M}}(\hat{\beta}_{n,\hat{M}}&space;-&space;\theta)\|_{\infty}&space;\le&space;C_n^{\Gamma}(\alpha)\right\}," target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat{\mathcal{R}}_{n,\hat{M}}&space;:=&space;\left\{\theta\in\mathbb{R}^{|\hat{M}|}:\,\|\hat{\Sigma}_{n,\hat{M}}(\hat{\beta}_{n,\hat{M}}&space;-&space;\theta)\|_{\infty}&space;\le&space;C_n^{\Gamma}(\alpha)\right\}," title="\hat{\mathcal{R}}_{n,\hat{M}} := \left\{\theta\in\mathbb{R}^{|\hat{M}|}:\,\|\hat{\Sigma}_{n,\hat{M}}(\hat{\beta}_{n,\hat{M}} - \theta)\|_{\infty} \le C_n^{\Gamma}(\alpha)\right\}," /></a>
+
 where
-\[
-\hat{\Sigma}_{n,\hat{M}} := \frac{1}{n}\sum_{i=1}^n X_{i,\hat{M}}X_{i,\hat{M}}^{\top},
-\]
-and $C_n^{\Gamma}(\alpha)$ represents the $(1-\alpha)$-th quantile of $\|n^{-1}\sum_{i=1}^n \{X_{i}Y_i - \mathbb{E}[X_iY_i]\}\|_{\infty}$.
+
+<a href="https://www.codecogs.com/eqnedit.php?latex=\hat{\Sigma}_{n,\hat{M}}&space;:=&space;\frac{1}{n}\sum_{i=1}^n&space;X_{i,\hat{M}}X_{i,\hat{M}}^{\top}," target="_blank"><img src="https://latex.codecogs.com/gif.latex?\hat{\Sigma}_{n,\hat{M}}&space;:=&space;\frac{1}{n}\sum_{i=1}^n&space;X_{i,\hat{M}}X_{i,\hat{M}}^{\top}," title="\hat{\Sigma}_{n,\hat{M}} := \frac{1}{n}\sum_{i=1}^n X_{i,\hat{M}}X_{i,\hat{M}}^{\top}," /></a>
+
+and <a href="https://www.codecogs.com/eqnedit.php?latex=C_n^{\Gamma}(\alpha)" target="_blank"><img src="https://latex.codecogs.com/gif.latex?C_n^{\Gamma}(\alpha)" title="C_n^{\Gamma}(\alpha)" /></a> represents the <a href="https://www.codecogs.com/eqnedit.php?latex=(1-\alpha)" target="_blank"><img src="https://latex.codecogs.com/gif.latex?(1-\alpha)" title="(1-\alpha)" /></a>-th quantile of <a href="https://www.codecogs.com/eqnedit.php?latex=\|n^{-1}\sum_{i=1}^n&space;\{X_{i}Y_i&space;-&space;\mathbb{E}[X_iY_i]\}\|_{\infty}" target="_blank"><img src="https://latex.codecogs.com/gif.latex?\|n^{-1}\sum_{i=1}^n&space;\{X_{i}Y_i&space;-&space;\mathbb{E}[X_iY_i]\}\|_{\infty}" title="\|n^{-1}\sum_{i=1}^n \{X_{i}Y_i - \mathbb{E}[X_iY_i]\}\|_{\infty}" /></a>.
 
 ### Sample generation scheme
 
