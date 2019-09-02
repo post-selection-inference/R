@@ -2,6 +2,26 @@
 
 This page is to demonstrate simulations comparing the assumption-lean PoSI with various post-selection inference methods. Please [download](https://github.com/post-selection-inference/R/archive/master.zip) or clone this repo and install the packages if necessary. Details of the simulation setup will be updated soon on [Valid Post-selection Inference in Assumption-lean Linear Regression](https://arxiv.org/abs/1806.04119). Our package will be also up soon.
 
+The above mentioned paper provides valid confidence regions post-variable selection in the context of linear regression. Suppose $(X_i, Y_i)\in\mathbb{R}^{p+1}, 1\le i\le n$ represent the regression data. The OLS estimator for constructed based on $(X_{i,M}, Y_i)$ for a subset $M\subseteq\{1,2,\ldots,p\}$ is given by
+\[
+\hat{\beta}_{M} := \left(\frac{1}{n}\sum_{i=1}^n X_{i,M}X_{i,M}^{\top}\right)^{-1}\left(\frac{1}{n}\sum_{i=1}^n X_{i,M}Y_i\right)\in\mathbb{R}^{|M|}.
+\]
+(This is constructed based only on the covariates with indices in $M$.) The target of this OLS estimator is given by
+\[
+\beta_M := \left(\frac{1}{n}\sum_{i=1}^n \mathbb{E}\left[X_{i,M}X_{i,M}^{\top}\right]\right)^{-1}\left(\frac{1}{n}\sum_{i=1}^n \mathbb{E}[X_{i,M}Y_i]\right).
+\]
+The reason for calling this the target of $\hat{\beta}_{M}$ is shown in the paper. For the case of fixed covariates, the expectation is only with respect to $Y_i$'s.
+
+The proposed confidence regions for $\beta_{\hat{M}}$ for a randomly selected model $\hat{M}$ (in case of fixed covariates) is given by
+\[
+\hat{\mathcal{R}}_{n,\hat{M}} := \left\{\theta\in\mathbb{R}^{|\hat{M}|}:\,\|\hat{\Sigma}_{n,\hat{M}}(\hat{\beta}_{n,\hat{M}} - \theta)\|_{\infty} \le C_n^{\Gamma}(\alpha)\right\},
+\] 
+where
+\[
+\hat{\Sigma}_{n,\hat{M}} := \frac{1}{n}\sum_{i=1}^n X_{i,\hat{M}}X_{i,\hat{M}}^{\top},
+\]
+and $C_n^{\Gamma}(\alpha)$ represents the $(1-\alpha)$-th quantile of $\|n^{-1}\sum_{i=1}^n \{X_{i}Y_i - \mathbb{E}[X_iY_i]\}\|_{\infty}$.
+
 ### Sample generation scheme
 
 The following code generates samples using setup specified in `opt`. 
