@@ -85,11 +85,12 @@ maxt_posi <- function(x, y, maxk = ncol(x), sandwich = TRUE,
   maxt_0 <- rep(-Inf, Nboot)
   
   for(k in 1:maxk) {
+    print(k)
     varlist <- gen_submodel_indices_k(k, p)
     set.seed(123)
     EE <- matrix(rnorm(n*Nboot), nrow = n, ncol = Nboot)
-    tmax_ret <- tmax::max_t_mul_boot_by_k(x, y, EE, sandwich = sandwich, opt$nboot, varlist)
-    maxt_0 <- pmax(maxt_0, colMax(tmax_ret$max_t))
+    tmax_ret <- tmax::max_t_mul_boot_by_k(x, y, EE, sandwich = sandwich, Nboot, varlist)
+    maxt_0 <- pmax(maxt_0, colMaxs(tmax_ret$max_t))
   }
   
   k0 <- quantile(maxt_0, 1 - alpha)
