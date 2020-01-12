@@ -1,0 +1,1444 @@
+---
+title: "Welcome to PoSI site"
+author: ''
+output:
+  html_document:
+    code_folding: show
+    highlight: haddock
+    theme: lumen
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+    number_sections: true
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+  word_document:
+    toc: yes
+    toc_depth: '3'
+bibliography: bibliography.bib
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.path = "fig/")
+library(pracma)
+library(matrixStats)
+library(leaps)
+
+if (!require("tmax")) install.packages("../tmax_1.0.tar.gz", repos=NULL, dependencies=T)
+require("tmax")
+source("../utilities.R")
+# This file contains the functions Generate()
+# and fixedx_posi().
+```
+
+
+This page is to demonstrate simulations comparing the assumption-lean PoSI with various post-selection inference methods. Please [download](https://github.com/post-selection-inference/R/archive/master.zip) or clone this repo and install the packages if necessary. Details of the simulation setup will be updated soon on [Valid Post-selection Inference in Assumption-lean Linear Regression](https://arxiv.org/abs/1806.04119). Our package will be also up soon.
+
+The above mentioned paper provides valid confidence regions post-variable selection in the context of linear regression. Suppose $(X_i, Y_i), 1\le i\le n$ represent the regression data. The OLS estimator for constructed based $(X_{i,M}, Y_i)$ for a subset $M \subset \{1,2,\ldots, p \}$ is given by 
+
+$$\hat{\beta}_{M} := \left(\frac{1}{n}\sum_{i=1}^n X_{i,M}X_{i,M}^{\top}\right)^{-1}\left(\frac{1}{n}\sum_{i=1}^n X_{i,M}Y_i\right)\in\mathbb{R}^{|M|}.$$
+
+(This is constructed based only on the covariates with indices in $M$.) The target of this OLS estimator is given by
+
+$${\beta}_{M} := \left(\frac{1}{n}\sum_{i=1}^n \mathbb{E}\left[X_{i,M}X_{i,M}^{\top}\right ]\right)^{-1}\left(\frac{1}{n}\sum_{i=1}^n \mathbb{E} \left[X_{i,M}Y_i \right ]\right)\in\mathbb{R}^{|M|}.$$
+
+The reason for calling this the target of $\hat{\beta}_M$ is shown in the paper. For the case of fixed covariates, the expectation is only with respect to $Y_i$'s. The proposed confidence regions for $\beta_{\hat{M}}$ for a randomly selected model $\hat{M}$ (in case of fixed covariates) is given by
+
+$$\hat{\mathcal{R}}_{n,\hat{M}} := \left\{\theta\in\mathbb{R}^{|\hat{M}|}:\,\|\hat{\Sigma}_{n,\hat{M}}(\hat{\beta}_{n,\hat{M}} - \theta)\|_{\infty} \le C_n^{\Gamma}(\alpha)\right\},$$
+
+where $\textstyle\hat{\Sigma}_{n,\hat{M}} := n^{-1}\sum_{i=1}^n X_{i,\hat{M}}X_{i,\hat{M}}^{\top},$
+and $C_n^{\Gamma}(\alpha)$ represents the $(1-\alpha)$-th quantile of $\|n^{-1}\sum_{i=1}^n\{X_{i}Y_i-\mathbb{E}[X_iY_i]\}\|_{\infty}$.
+
+
+# Post-selection Inference Problem
+
+It is commonly taught in statistics courses to explore the data, understand its features, iteratively build a model to reach a "good" model that describes the data well. For instance, a widely used undergraduate textbook [@moore2012introduction, pp. 724] on page 724 (in the context of exploring the relation between GPA and average high school grades in Mathematics (HSM), Science (HSS) and English (HSE)) writes that
+
+> "Because the variable HSS has the largest P-value of the three explanatory variables and therefore appears to contribute the least to our explanation of GPA, we rerun the regression using only HSM and HSE as explanatory variables." 
+
+This is a common variable selection pratice in the regression analysis. More generally, researchers or practioners will proceed as follows [@berk2010statistical].
+
+1. A set of models is constructed
+2. The data are examined, and a "final" model is selected.
+3. The parameters of that model are estimated.
+4. Statistical inference is applied to the parameter estimates.
+
+After examining the data and selecting the variables, it is NOT valid to conclude from a regression table as if no selection took place. The selection uncertainty has to be accounted for. 
+<!-- (In addition, by saying "the largest P-value", we are trying to infer about all coefficients simultaneously but the usual summary tables are only marginally valid. But let us focus on the selection issue first.) -->
+
+## Sub-model estimators DO NOT estimate full model parameters
+
+Assume
+$$ Y_i = X_i^T\boldsymbol\beta + \epsilon_i \quad \epsilon_i \sim N(0, \sigma^2).$$
+
+Then the submodel target of the OLS estimator can written as
+\[
+\begin{split}
+\beta_M & := \left(\frac{1}{n}\sum_{i=1}^n \mathbb{E}\left[X_{i,M}X_{i,M}^{\top}\right ]\right)^{-1}\left(\frac{1}{n}\sum_{i=1}^n \mathbb{E} \left[X_{i,M}Y_i \right ]\right) \\
+& = \left(\frac{1}{n}\sum_{i=1}^n \mathbb{E}\left[X_{i,M}X_{i,M}^{\top}\right ]\right)^{-1} 
+\left(\frac{1}{n}\sum_{i=1}^n \mathbb{E} \left[X_{i,M} \left(X_{i,M} X_{i,-M}\right)^T 
+\left( \begin{array}{cc}
+\beta(M) \\	 \beta(-M)
+\end{array} \right)
+\right ]\right) \\
+& = \beta(M) + \left(\frac{1}{n}\sum_{i=1}^n \mathbb{E}\left[X_{i,M}X_{i,M}^{\top}\right ]\right)^{-1} 
+\left(\frac{1}{n}\sum_{i=1}^n \mathbb{E} \left[X_{i,M}X_{i,-M}^T \right ]\right) \beta(-M)
+\end{split}
+\]
+where $\beta(M)$ denotes the subvector of $\beta$ with indices in $M$
+and $\beta(-M)$ denotes the subvector of $\beta$ with indices not in $M$.
+The sub-model OLS estimators do not target the correponding parameters in the full model
+unless $X_{i,M}$ and $X_{i,-M}$ are not correlated. 
+In other words, the meaning of a predictor's coefficient depends on 
+what other predictors are included in the model.
+
+Let's consider the following simulation. Suppose the variance-covariance matrix of $X$ is
+$$\Sigma = \left(\begin{array}{cc}
+5 & 4 &5 \\ 4 &6 &5 \\ 5 & 5& 7
+\end{array}\right)$$
+and the response 
+\[
+Y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \beta_3 X_3 + \epsilon 
+\quad \epsilon \overset{iid}{\sim} N(0,3)
+\]
+where $\boldsymbol \beta = (\beta_0,\beta_1,\beta_2, \beta_3) = (1,2,3,3)$. 
+The following simulation shows that the OLS estimator
+constructed based on model containing the first two covariates $(X_1, X_2)$ does not estimate the full model parameter.
+
+```{r submodel}
+beta0 <- c(1,2,3,3)
+sigma <- diag(c(5,6,7))
+sigma[lower.tri(sigma)] <- c(4,5,5)
+sigma[upper.tri(sigma)] <- t(sigma)[upper.tri(sigma)]
+
+n <- 100
+X <- MASS::mvrnorm(n, beta0[-1], Sigma = sigma, empirical = F)
+y <- cbind(1, X) %*% beta0 + rnorm(n, sd=3)
+
+M <- 1:2
+lm(y ~ X[,M])
+```
+
+
+
+## What does selection invalidate?
+
+Variable selection procedures are data-driven and thus lead to selection uncertainty, for which theclassical inference theory does not accout.
+
+Let's continue with the previous simulation setting but with
+$$\boldsymbol \beta = (\beta_0,\beta_1,\beta_2, \beta_3) = (1,0,0,0).$$ We set $\beta_1,\beta_2, \beta_3$ to be 0 so that their t-statistics are centered at 0.
+
+If we would have known $\beta_1=0$ a priori, we would fit the submodel $M_0 = \{0, 2, 3\}$ and
+the t-statistics of $\beta_{2,M_0}$, 
+i.e. $\left|\hat{\beta}_2,M_0 - \beta_{2,M_0}\right|/\hat\sigma_{2,M_0}$ where
+$\hat\sigma_{2,M_0}$ is some sample standard deviation of $\hat{\beta}_{2,M_0}$,
+follows a t-distribution with degree of freedom $n - 3$.
+We can then construct $(1-\alpha)$ confidence interval for $\beta_{2,M_0}$,
+\[
+\hat{\mathcal{R}}_{2, M_0} = \left[\hat{\beta}_{2, M_0}\pm t_{n-3, 1-\alpha/2 } \hat\sigma_{2,M_0}\right]
+\]
+where $t_{n-3, 1-\alpha/2 }$ is the $1-\alpha/2$ quantile of a 
+t-distribution with $(n-3)$ degrees of freedom.
+$\hat{\mathcal{R}}_{2, M_0}$ is marginally valid with 
+a $1-\alpha$ coverage, i.e.
+\[
+\mathbb{P}\left(\beta_{2,M_0} \in \hat{\mathcal{R}}_{2, M_0}\right) \geq 1-\alpha.
+\]
+
+
+However, if we first select variables 
+and then to test whether $\beta_2 = 0$, the test statistic under the null 
+no longer follows a t-distribution. In the follwing simulation, 
+we consider the fixed design case where
+$Y_i's$ are resampled in each simulation and we use forward stepwise 
+with minimum $Cp$ to select variables. 
+Denote the index set of selected variables as $\hat{M}$.
+We plot the t-statistics of $\beta_{2,\hat{M}}$ from each simulation if $X_2$ is selected. 
+We do the same for $\beta_1$.
+
+
+
+```{r tstat, cache=T}
+beta0 <- c(1,0,0,0)
+sigma <- diag(c(5,6,7))
+sigma[lower.tri(sigma)] <- c(4,5,5)
+sigma[upper.tri(sigma)] <- t(sigma)[upper.tri(sigma)]
+
+nsim <- 1000
+n <- 100
+p <- length(beta0) - 1
+# preferred model
+M0 <- c(F,T,T)
+# t-stat in the prefered model
+t0.beta <- matrix(NA, nrow=nsim, ncol=p)
+# t-stat in the selected model
+t.beta <- matrix(NA, nrow=nsim, ncol=p) 
+X <- MASS::mvrnorm(n, c(0,0,0), Sigma = sigma, empirical = F)
+for(isim in 1:nsim) {
+  y <- cbind(1, X) %*% beta0 + rnorm(n, sd=3)
+  
+  # fit preferred model
+  fit0 <- lm(y ~ X[,M0])
+  t0.beta[isim, M0] <- summary(fit0)$coef[, "t value"][-1]
+  
+  # forward selection with cp
+  fit.fs <- regsubsets(X, y, method="forward")
+  fit.fs.s <- summary(fit.fs)
+  fit.fs.s$cp
+  mincp <- fit.fs.s$which[which.min(fit.fs.s$cp),][-1]
+  fit <- lm(y ~ X[,mincp])
+  t.beta[isim, mincp] <- summary(fit)$coef[, "t value"][-1]
+}
+
+par(mfrow=c(1,2))
+plot(seq(-3,3,.1), dnorm(seq(-3,3,.1)), type="l", 
+     xlab="", ylab="t-stat of beta1")
+lines(density(t.beta[,1], na.rm=T), lty=2, col="blue")
+legend("bottom", xpd=TRUE, ncol = 3, cex=.5,
+       legend = c("M0", 
+                  "X1 selected"),
+       col=c("black", "blue"), 
+       lty = c("solid", "dashed"))
+
+plot(seq(-3,3,.1), dnorm(seq(-3,3,.1)), type="l", 
+     xlab="", ylab="t-stat of beta2")
+lines(density(t.beta[,2], na.rm=T), lty=2, col="red")
+legend("bottom", xpd=TRUE, ncol = 3, cex=.5,
+       legend = c("M0", 
+                  "X2 selected"),
+       col=c("black", "red"), 
+       lty = c("solid", "dashed"))
+```
+
+
+```{r posi1, cache=T}
+p <- 20
+beta0 <- c(1, 0, runif(p-1, 0, .5))
+
+nsim <- 5000
+n <- 200
+
+# t-stat in the selected model
+t.beta <- matrix(NA, nrow=nsim, ncol=p) 
+for(isim in 1:nsim) {
+  # X <- matrix(rnorm(n*p), nrow = n, ncol = p)
+  X <- cbind(rbinom(n, 1, 0.3), matrix(rnorm(n*(p-1)), nrow = n, ncol = p-1))
+  y <- cbind(1, X) %*% beta0 + rnorm(n, sd=10)
+  
+  # forward selection with cp
+  fit.fs <- regsubsets(X, y, method="forward", force.in = 1)
+  fit.fs.s <- summary(fit.fs)
+  fit.fs.s$cp
+  mincp <- fit.fs.s$which[which.min(fit.fs.s$cp),][-1]
+  fit <- lm(y ~ X[,mincp])
+  t.beta[isim, mincp] <- summary(fit)$coef[, "t value"][-1]
+}
+
+par(mfrow=c(1,1))
+hist(t.beta[,1], breaks = 100, freq = F)
+lines(seq(-3,3,.1), dnorm(seq(-3,3,.1)), type="l", 
+      xlab="", ylab="t-stat of beta1")
+
+legend("bottom", xpd=TRUE, ncol = 3, cex=.5,
+       legend = c("M0", 
+                  "X1 selected"),
+       col=c("black", "blue"), 
+       lty = c("solid", "dashed"))
+
+plot(seq(-3,3,.1), dnorm(seq(-3,3,.1)), type="l", 
+     xlab="", ylab="t-stat of beta2")
+lines(density(t.beta[,2], na.rm=T), lty=2, col="red")
+legend("bottom", xpd=TRUE, ncol = 3, cex=.5,
+       legend = c("M0", 
+                  "X2 selected"),
+       col=c("black", "red"), 
+       lty = c("solid", "dashed"))
+
+
+beta0 <- c(3,0,0,0)
+sigma <- diag(c(5,6,7))
+sigma[lower.tri(sigma)] <- c(4,5,5)
+sigma[upper.tri(sigma)] <- t(sigma)[upper.tri(sigma)]
+
+n <- 100
+X <- MASS::mvrnorm(n, beta0[-1], Sigma = sigma, empirical = F)
+y <- cbind(1, X) %*% beta0 + rnorm(n, sd=sqrt(10))
+
+nsim <- 1000
+p <- length(beta0) - 1
+# t-stat in the selected model
+t.beta <- matrix(NA, nrow=nsim, ncol=p) 
+
+for(isim in 1:nsim) {
+  X <- MASS::mvrnorm(n, beta0[-1], Sigma = sigma, empirical = F)
+  y <- cbind(1, X) %*% beta0 + rnorm(n, sd=sqrt(10))
+  
+  # forward selection with cp
+  fit.fs <- regsubsets(X, y, method="exhaustive", force.in = 1)
+  fit.fs.s <- summary(fit.fs)
+  fit.fs.s$cp
+  mincp <- fit.fs.s$which[which.min(fit.fs.s$cp),][-1]
+  fit <- lm(y ~ X[,mincp])
+  t.beta[isim, mincp] <- summary(fit)$coef[, "t value"][-1]
+}
+
+par(mfrow=c(1,1))
+hist(t.beta[,1], breaks = 50, freq = F)
+lines(seq(-3,3,.1), dnorm(seq(-3,3,.1)), type="l", 
+      xlab="", ylab="t-stat of beta1")
+
+
+
+beta0 <- c(1, 0, 0.5)
+n <- 100
+
+nsim <- 1000
+p <- length(beta0) - 1
+# t-stat in the selected model
+t.beta <- matrix(NA, nrow=nsim, ncol=p) 
+
+for(isim in 1:nsim) {
+  X <- cbind(rbinom(n, 1, 0.5), rnorm(n, 0, 2))
+  # X <- cbind(rbinom(n, 1, 0.5), 1)
+  y <- cbind(1, X) %*% beta0 + rnorm(n, sd=sqrt(10))
+  
+  fit <- lm(y ~ X)
+  fit.s <- summary(fit)
+  
+  p.x2 <- fit.s$coefficients[3,4]
+  M0 <- c(T, T)
+  if(p.x2 > 0.05)  M0 <- c(T, F)
+  
+  fit <- lm(y ~ X[, M0])
+  
+  t.beta[isim, M0] <- summary(fit)$coef[, "t value"][-1]
+}
+
+mean(sapply(1:nsim, function(x) all.equal(!is.na(t.beta[x,]), c(T, T))) == T)
+
+par(mfrow=c(1,1))
+hist(t.beta[,1], breaks = 100, freq = F)
+lines(seq(-3,3,.1), dnorm(seq(-3,3,.1)), type="l", 
+      xlab="", ylab="t-stat of beta1")
+
+
+
+#####
+beta0 <- c(0, 0.5)
+n <- 200
+
+nsim <- 5000
+p <- length(beta0)
+# t-stat in the selected model
+t.beta <- matrix(NA, nrow=nsim, ncol=p) 
+
+for(isim in 1:nsim) {
+  # X <- cbind(rbinom(n, 1, 0.5), rnorm(n, 0, 2))
+  X <- cbind(rbinom(n, 1, 0.5), rbinom(n, 1, 0.5))
+  y <- X %*% beta0 + rnorm(n, sd=sqrt(10))
+  
+  fit <- lm(y ~ X - 1)
+  fit.s <- summary(fit)
+  
+  p.x2 <- fit.s$coefficients[2,4]
+  M0 <- c(T, T)
+  if(p.x2 > 0.05)  M0 <- c(T, F)
+  
+  fit <- lm(y ~ X[, M0] - 1)
+  
+  t.beta[isim, M0] <- summary(fit)$coef[, "t value"]
+}
+
+mean(sapply(1:nsim, function(x) all.equal(!is.na(t.beta[x,]), c(T, T))) == T)
+
+par(mfrow=c(1,1))
+hist(t.beta[,1], breaks = 100, freq = F, ylim = c(0,.4))
+abline(v = 1.96, col = "red")
+lines(seq(-3,3,.1), dnorm(seq(-3,3,.1)), type="l", 
+      xlab="", ylab="t-stat of beta1")
+
+
+
+#####
+beta0 <- c(0, 0, 0.5)
+n <- 200
+
+nsim <- 1000
+p <- length(beta0)
+# t-stat in the selected model
+t.beta <- matrix(NA, nrow=nsim, ncol=p) 
+
+for(isim in 1:nsim) {
+  # X <- cbind(rbinom(n, 1, 0.5), rnorm(n, 0, 2))
+  X <- cbind(1, rbinom(n, 1, 0.5), rbinom(n, 1, 0.5))
+  y <- X %*% beta0 + rnorm(n, sd=sqrt(10))
+  
+  fit <- lm(y ~ X - 1)
+  fit.s <- summary(fit)
+  
+  p.x2 <- fit.s$coefficients[3,4]
+  M0 <- c(T, T, T)
+  if(p.x2 > 0.05)  M0 <- c(T, T, F)
+  
+  fit <- lm(y ~ X[, M0] - 1)
+  
+  t.beta[isim, M0] <- summary(fit)$coef[, "t value"]
+}
+
+mean(sapply(1:nsim, function(x) all.equal(!is.na(t.beta[x,]), c(T, T, T))) == T)
+
+par(mfrow=c(1,1))
+hist(t.beta[,2], breaks = 100, freq = F, ylim = c(0,.4))
+abline(v = 1.96, col = "red")
+lines(seq(-3,3,.1), dnorm(seq(-3,3,.1)), type="l", 
+      xlab="", ylab="t-stat of beta1")
+
+```
+
+### Replicate Berk et. al. 2010
+
+```{r berk2010}
+beta0 <- c(3,0,1,.1)
+sigma <- diag(c(5,6,7))
+sigma[lower.tri(sigma)] <- c(4,5,5)
+sigma[upper.tri(sigma)] <- t(sigma)[upper.tri(sigma)]
+
+beta0 <- c(3,0,0,0,0,1,.1)
+sigma <- diag(c(1,1,1,5,6,7))
+p <- length(beta0) - 1
+rmat <- matrix(rnorm(p*p), nrow = p)
+sigma <- rmat %*% sigma %*% t(rmat)
+
+n <- 200
+X <- MASS::mvrnorm(n, beta0[-1], Sigma = sigma, empirical = F)
+y <- cbind(1, X) %*% beta0 + rnorm(n, sd=sqrt(10))
+
+nsim <- 10000
+p <- length(beta0) - 1
+# preferred model
+M0 <- c(T,T,F)
+# M0 <- c(T,T,F,F,T,F)
+# t-stat in the prefered model
+t0.beta <- matrix(NA, nrow=nsim, ncol=p)
+# t-stat in the selected model
+t.beta <- matrix(NA, nrow=nsim, ncol=p) 
+t0.sub.beta <- matrix(NA, nrow=nsim, ncol=p) 
+for(isim in 1:nsim) {
+  y <- cbind(1, X) %*% beta0 + rnorm(n, sd=sqrt(10))
+  
+  # fit original model
+  fit0 <- lm(y ~ X)
+  t0.beta[isim, ] <- summary(fit0)$coef[, "t value"][-1]
+  
+  # fit preferred model
+  fit0.sub <- lm(y ~ X[,M0])
+  t0.sub.beta[isim, M0] <- summary(fit0.sub)$coef[, "t value"][-1]
+  
+  # forward selection with cp
+  fit.fs <- regsubsets(X, y, method="forward")
+  fit.fs.s <- summary(fit.fs)
+  fit.fs.s$cp
+  mincp <- fit.fs.s$which[which.min(fit.fs.s$cp),][-1]
+  fit <- lm(y ~ X[,mincp])
+  t.beta[isim, mincp] <- summary(fit)$coef[, "t value"][-1]
+}
+
+M0.sel <- sapply(1:nsim, function(x) all.equal(!is.na(t.beta[x,]), M0)) == T
+mean(M0.sel)
+
+t0 <- mean(t0.beta[,2])
+
+par(mfrow=c(1,1))
+plot(density(t0.beta[,2]), type="l")
+# hist(t0.beta[,2], breaks = 100, freq = F)
+plot(density(t0.sub.beta[,2]), lty=2, col="green")
+# hist(t0.sub.beta[,2], breaks = 100, freq = F)
+lines(density(t.beta[M0.sel,2], na.rm=T), lty=2, col="red")
+lines(seq(t0-3,t0+3,.1), dnorm(seq(t0-3,t0+3,.1), mean = t0), type="l", 
+      xlab="", ylab="t-stat of beta1", col="red")
+legend("bottom", xpd=TRUE, ncol = 3, cex=.5,
+       legend = c("X in M0", 
+                  "X in M0 selected"),
+       col=c("black", "blue"), 
+       lty = c("solid", "dashed"))
+
+pdf("simulation.pdf", width = 8, height = 6)
+hist(t.beta[M0.sel,2], breaks = 200, freq = F,
+     xlab = "t", main = "")
+lines(density(t0.sub.beta[,2], bw = .4), lty=1, col="red")
+legend("topright", lwd = 2, cex = 0.7,
+       legend = c("Actual Dist.", 
+                  "Nominal Dist."),
+       col=c("black", "red"))
+dev.off()
+
+qu <- quantile(t0.sub.beta[,2], 0.975)
+ql <- quantile(t0.sub.beta[,2], 0.025)
+mean(t.beta[M0.sel,2] < qu & t.beta[M0.sel,2] > ql)
+
+plot(density(t0.beta[,3]), type="l")
+lines(density(t.beta[M0.sel,3], na.rm=T), lty=2, col="blue")
+legend("bottom", xpd=TRUE, ncol = 3, cex=.5,
+       legend = c("Z in M0", 
+                  "Z in M0 selected"),
+       col=c("black", "blue"), 
+       lty = c("solid", "dashed"))
+
+
+par(mfrow=c(1,2))
+plot(seq(-3,3,.1), dnorm(seq(-3,3,.1)), type="l", 
+     xlab="", ylab="t-stat of beta1")
+lines(density(t.beta[,1], na.rm=T), lty=2, col="blue")
+legend("bottom", xpd=TRUE, ncol = 3, cex=.5,
+       legend = c("M0", 
+                  "X1 selected"),
+       col=c("black", "blue"), 
+       lty = c("solid", "dashed"))
+
+plot(seq(-3,3,.1), dnorm(seq(-3,3,.1)), type="l", 
+     xlab="", ylab="t-stat of beta2")
+lines(density(t.beta[,2], na.rm=T), lty=2, col="red")
+legend("bottom", xpd=TRUE, ncol = 3, cex=.5,
+       legend = c("M0", 
+                  "X2 selected"),
+       col=c("black", "red"), 
+       lty = c("solid", "dashed"))
+```
+
+
+## Simultaneous interval as a solution
+
+As shown in the simulation, the null distribution of the ``t-statistics'' is NOT a t distribution 
+if selection is involved, and hence the classical confidence interval $\hat{\mathcal{R}}_{2, \hat{M}}$ will not have 
+a $(1-\alpha)$ coverage guarantee.
+
+<!-- A simple remedy is sample spliting: -->
+<!-- select variables using one random subset of the data and contruct confidence interval using the rest of the data. The other  -->
+
+Let's pause for a second and take a look at $\hat{M}$. 
+Denote the set of possible models as $\mathcal{M}_p$.
+The selected model $\hat{M}$ is a result of some kind of 
+model selection based on the data $(X_i, Y_i)_{i=1}^n$. 
+It could have been a different one in $\mathcal{M}_p$ if we had observed a different realization of the data. The randomness of $\hat{M}$ has the following consequences as pointed out in [@Berk13]:
+
+1. The dimension of $\boldsymbol \beta_{\hat{M}}$ is random. In the previous simulation, the probablity of choosing a model of size 1 to 3 is `r prop.table(table(rowSums(is.na(t.beta))))` respectively.
+
+2. For each variable $X_j$, it may or may not be selected, i.e. $j \in \hat{M}$. In the previous simulation, the probability of each of $X_1, X_2, X_3$ being selected is `r colMeans(!is.na(t.beta))` respectively. 
+
+3. Condition on $j \in \hat{M}$, $\beta_{j, \hat{M}}$ is also random as in [Sub-model estimators DO NOT estimate full model parameters].
+
+The randomness of $\hat{M}$ along with its consequences 
+requires a valid post-selection inference to provide
+guarantee for all $j \in \hat{M}$ uniformly across all $\hat{M}\in\mathcal{M}_p$,
+\begin{equation}
+\mathbb{P} \left(\beta_{j, \hat{M}} \in \hat{\mathcal{R}}_{\hat{j, M}} \quad \forall j \in \hat{M} \right) \geq 1-\alpha \quad \forall \hat{M}\in\mathcal{M}_p.
+(\#def:posi)
+\end{equation}
+The universal validity permits a guarantee of coverage for 
+``researcher's degree of freedom'' in variable selection:
+the post-selection inference is valid after any model selection 
+procedure including the ad-hoc ones. 
+
+Solving the post-selection inference problem \@ref{def:posi} is equivalent to 
+sovling the simultanoues inference problem over $M\in\mathcal{M}_p$,
+\[
+\mathbb{P}\left(\cap_{M\in\mathcal{M}_p} \left\{\beta_M \in \hat{\mathcal{R}}_M \right\} \right) \geq 1-\alpha.
+\]
+
+### Can bootstrap estimate the distribution after selection?
+```{r}
+nboot <- 1000
+t.beta.boot <- matrix(NA, nrow=nboot, ncol=p) 
+for(iboot in 1:nboot) {
+  boot_idx <- sample(100, 100, replace = T)
+  y_boot <- y[boot_idx]
+  X_boot <- X[boot_idx,]
+  
+  fit.fs <- regsubsets(X_boot, y_boot, method="forward")
+  fit.fs.s <- summary(fit.fs)
+  fit.fs.s$cp
+  mincp <- fit.fs.s$which[which.min(fit.fs.s$cp),][-1]
+  fit <- lm(y_boot ~ X_boot[,mincp])
+  t.beta.boot[iboot, mincp] <- summary(fit)$coef[, "t value"][-1]
+}
+
+plot(seq(-3,3,.1), dnorm(seq(-3,3,.1)), type="l")
+lines(density(t.beta.boot[,1], na.rm=T), lty=2, col="blue")
+lines(density(t.beta.boot[,2], na.rm=T), lty=2, col="red")
+lines(density(t.beta.boot[,3], na.rm=T), lty=2, col="green")
+
+colMeans(!is.na(t.beta.boot))
+```
+
+How about CV?
+```{r eval=F}
+t.beta.cv <- matrix(NA, nrow=n, ncol=p) 
+cv.idx <- sample(100, 100, replace = F)
+cv.n <- 10
+for(icv in 1:cv.n) {
+  y_cv <- y[cv]
+  X_cv <- X[-icv,]
+  
+  fit.fs <- regsubsets(X_cv, y_cv, method="forward")
+  fit.fs.s <- summary(fit.fs)
+  fit.fs.s$cp
+  mincp <- fit.fs.s$which[which.min(fit.fs.s$cp),][-1]
+  fit <- lm(y_cv ~ X_cv[,mincp])
+  t.beta.cv[icv, mincp] <- summary(fit)$coef[, "t value"][-1]
+}
+
+hist(t.beta.cv[,3], freq = F)
+lines(seq(-3,3,.1), dnorm(seq(-3,3,.1)), type="l")
+lines(density(t.beta.cv[,1], na.rm=T), lty=2, col="blue")
+lines(density(t.beta.cv[,2], na.rm=T), lty=2, col="blue")
+lines(density(t.beta.cv[,3], na.rm=T), lty=2, col="blue")
+
+colMeans(!is.na(t.beta))
+
+```
+
+```{r}
+beta0 <- c(1,0,0,1,2)
+sigma <- diag(c(5,6,7,4))
+sigma[lower.tri(sigma)] <- c(4,3,4, 3,3,3)
+sigma[upper.tri(sigma)] <- t(sigma)[upper.tri(sigma)]
+
+nsim <- 1000
+n <- 100
+p <- length(beta0) - 1
+# preferred model
+M0 <- c(T,T,T,F)
+# t-stat in the prefered model
+t0.beta <- matrix(NA, nrow=nsim, ncol=p)
+# t-stat in the selected model
+t.beta <- matrix(NA, nrow=nsim, ncol=p) 
+X <- MASS::mvrnorm(n, beta0[-1], Sigma = sigma, empirical = F)
+y <- cbind(1, X) %*% beta0 + rnorm(n, sd=3)
+
+t.vec <- NULL
+alphas <- seq(0,10,.1)
+U <- rnorm(n)
+for(alpha in alphas){
+  y.adj <- y - alpha*U
+  fit <- lm(y.adj ~ X[,M0])
+  t.tmp <- summary(fit)$coef[, "t value"][-1]
+  t.vec <- cbind(t.vec, t.tmp)
+}
+plot(alphas, t.vec[1,], type="l")
+```
+
+
+## Simulation set up
+
+```{r sample}
+# Sample setup
+opt <- NULL
+opt$xmat <- "a"				# sample setup
+opt$nrow <- 200				# sample size
+opt$ncol <- 15				# number of covariates
+opt$maxk <- 5					# max model size
+opt$seed_beta <- 123	# random seed for X, beta
+opt$seed_eps <- 100		# random seed for error
+opt$conf_level <- .95	# confidence level
+opt$nboot <- 200			# bootstrap sample size
+opt$method <- "fs"		# model selection method
+
+# Generate sample
+data <- Generate(opt)
+xx <- data$x
+yy <- data$y
+```
+\pagebreak
+
+# Sentence length
+
+```{r crime}
+pacman::p_load(data.table, sandwich, jtools, xtable, lars, glmnet, 
+               selectiveInference, scales, dplyr, ggplot2, leaps)
+
+tmp = fread("Baltimore_Crime_sentence_length.dat")
+probation <- tmp[probation==1,]
+
+# response is suspendmn
+sub_vars <- c("suspendmn", "iassault", "idrug", "iburglary", "igun", 
+              "priors",
+              "firstage", "curage",
+              "race", "Married?", "educ", "Male?")
+probation_sub <- probation[, ..sub_vars]
+probation_sub[, race_black:=ifelse(race == "BLACK", 1, 0)]
+probation_sub[, race := NULL]
+probation_sub[, log_suspendmn:=log(suspendmn+.5)]
+probation_sub[, suspendmn := NULL]
+
+sub_vars <- c("race_black", "iassault", "idrug", "iburglary", "igun", 
+              "priors",
+              "firstage", "curage",
+              "Married?", "educ", "Male?", "log_suspendmn")
+probation_sub <- probation_sub[, ..sub_vars]
+
+
+x <- model.matrix(log_suspendmn ~ ., probation_sub)
+y <- probation_sub$log_suspendmn
+fit.reg <- regsubsets(x, y, method = "exhaustive", intercept = F, force.in = 2)
+fit.reg.s <- summary(fit.reg)
+M.cp <- fit.reg.s$which[which.min(fit.reg.s$cp),]
+fit.cp <- lm(y ~ x[,M.cp] - 1)
+fit.cp.s <- summary(fit.cp)
+summ(fit.cp)
+fit.cp.sandwich.s <- summ(fit.cp)
+class(fit.cp.sandwich.s) <- "summary.lm"
+xtable(fit.cp.s)
+fit.cp.s
+
+fit.cp.ci <- summ(fit.cp, confint = T)$coeftable
+ret.ci <- cbind(fit.cp.ci[,c(2,3)],
+                Inf,
+                fit.cp$coefficients - posi.k * diag(sqrt(vcovHC(fit.cp, "HC0"))),
+                fit.cp$coefficients + posi.k * diag(sqrt(vcovHC(fit.cp, "HC0"))))
+xtable(ret.ci)
+
+posi.k <- summary(PoSI::PoSI(x))[1,1]
+fit.cp$coefficients[2] - posi.k * sqrt(vcovHC(fit.cp, "HC0")[2,2])
+fit.cp$coefficients[2] + posi.k * sqrt(vcovHC(fit.cp, "HC0")[2,2])
+
+posi.k1 <- sapply(which(M.cp)[-1]-1, function(m) summary(PoSI(x[,-1], posi1 = m))[1,1])
+
+# maxt
+library(Rcpp)
+source("../../src/utilities.R")
+Sys.setenv("PKG_LIBS" = "$(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)")
+sourceCpp("../../tmax/src/utilities.cpp")
+
+p <- ncol(x) - 1
+nboot <- 1000
+Hm <- matrix(NA, nrow = p, ncol = nboot)
+Hs <- matrix(NA, nrow = p, ncol = nboot)
+
+Hm1 <- matrix(NA, nrow = p, ncol = nboot)
+Hs1 <- matrix(NA, nrow = p, ncol = nboot)
+
+Hmp <- array(NA, c(p, nboot, p))
+Hsp <- array(NA, c(p, nboot, p))
+
+
+ks <- 1:p
+for(i in seq_along(ks)) {
+  k <- ks[i]
+  print(k)
+  tmp <- max_t_mul_boot_k(x[,-1], y, k,
+                          sandwich = T, return_sample = T,
+                          force_in = 1, Nboot = nboot, intercept = T,
+                          individual = 1:p)
+  Hs[i, ] <- colMax(tmp$BootSample)
+  Hm[i, ] <- colMax(tmp$BootRank)
+  
+  # Hs1[i, ] <- colMax(tmp$BootSample1)
+  # Hm1[i, ] <- colMax(tmp$BootRank1)
+  Hsp[i,,] <- t(tmp$BootSample1)
+  Hmp[i,,] <- t(tmp$BootRank1)
+  
+}
+
+# saveRDS(list(Hm = Hm, Hs = Hs, Hm1 = Hm1, Hs1 = Hs1),
+# "../../output_job_talk/crime_data_p11_n9034_maxt1_all.rds")
+ret <- readRDS("../../output_job_talk/crime_data_p11_n9034_maxt1.rds")
+Hm <- ret$Hm; Hs <- ret$Hs; Hm1 <- ret$Hm1; Hs1 <- ret$Hs1
+
+
+K <- get_T(Hm = Hs)
+K_norm <- get_T(x[,-1], y, M.cp[-1], Hm, maxk = p, Nboot = nboot, intercept = T, adjust = T, force_in = 1)
+
+K1 <- get_T(Hm = Hs1)
+K_norm1 <- get_T(x[,-1], y, M.cp[-1], Hm1, maxk = p, Nboot = nboot, intercept = T, adjust = T, force_in = 1)
+
+K1 <- get_T1(Hm = Hsp, M = M.cp[-1])
+K_norm1 <- get_T1(x[,-1], y, M.cp[-1], Hmp, maxk = p, Nboot = nboot, intercept = T, adjust = T)
+
+
+fit.cp$coefficients[2] - K_norm1 * sqrt(vcovHC(fit.cp, "HC0")[2,2])
+fit.cp$coefficients[2] + K1 * sqrt(vcovHC(fit.cp, "HC0")[2,2])
+
+se <- diag(sqrt(vcovHC(fit.cp, "HC0")))[-1]
+fit.cp.ci <- summ(fit.cp, confint = T)$coeftable[-1,]
+
+ret.ci <- 
+  data.table(var = factor(rep(colnames(x)[M.cp][-1], 4),
+                          levels = colnames(x)[M.cp][-1]),
+             method = factor(rep(c("t", "berk", "adjust", "adjust1"), 
+                                 each = sum(M.cp[-1])),
+                             levels = c("t", "berk", "adjust", "adjust1")),
+             lower = c(fit.cp.ci[,2], 
+                       fit.cp$coefficients[-1] - posi.k1 * se,
+                       fit.cp$coefficients[-1] - K_norm * se,
+                       fit.cp$coefficients[-1] - K_norm1 * se
+             ),
+             upper = c(fit.cp.ci[,3], 
+                       fit.cp$coefficients[-1] + posi.k1 * se,
+                       fit.cp$coefficients[-1] + K_norm * se,
+                       fit.cp$coefficients[-1] + K_norm1 * se
+             )
+  )
+
+xtable(ret.ci)
+
+pdf("../../output_job_talk/plot/crime_data_p11_n9034_maxt1.pdf", width = 8, height = 4)
+ret.ci %>%
+  filter(method %in% c("t", "berk", "adjust1")) %>%
+  ggplot(aes(x = var, col = method)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), position=position_dodge(0.6)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_color_manual(values = hue_pal()(4),
+                     labels = c("Naive", "PoSI", "Adjusted1")) +
+  xlab("") +
+  ylab("") + 
+  theme(legend.key=element_blank(),
+        legend.key.width = unit(1,"cm"),
+        legend.background=element_blank(),
+        legend.position = c(1, 0.85),
+        legend.direction = "vertical",
+        legend.justification="right",
+        legend.spacing.x = unit(0.05, 'in'),
+        legend.title = element_blank(), 
+        legend.text = element_text(size = 14),
+        axis.text.x = element_text(size = 14))
+dev.off()
+
+```
+
+```{r}
+nsim <- 1000
+fits.cp <- rep(NA, nsim)
+for(isim in 1:nsim) {
+  set.seed(15)
+  sample_idx <- sample(1:nrow(probation_sub), 2000)
+  probation_subsample <- probation_sub[sample_idx, ]
+  
+  x <- model.matrix(log_suspendmn ~ ., probation_subsample)
+  y <- probation_subsample$log_suspendmn
+  fit.reg <- regsubsets(x, y, method = "backward", intercept = F, force.in = 2)
+  fit.reg.s <- summary(fit.reg)
+  M.cp <- fit.reg.s$which[which.min(fit.reg.s$cp),]
+  fit.cp <- lm(y ~ x[,M.cp] - 1)
+  fit.cp.s <- summary(fit.cp)
+  fit.cp.s
+  
+}
+
+
+
+sample_idx <- sample(1:nrow(probation), 250)
+probation_subsample <- probation[sample_idx, ]
+
+lm(log(suspendmn+.5) ~ iassault + idrug + igun + priors , probation)
+fit = lm(log(suspendmn+.5) ~ iassault + idrug + igun + priors , probation_subsample)
+summary(fit)
+confint(fit, level = 1-0.05/4)
+
+
+nsim = 1000
+fits.bic <- NULL
+for(isim in 1:nsim) {
+  sample_idx <- sample(1:nrow(probation_sub), 250)
+  probation_subsample <- probation_sub[sample_idx, ]
+  
+  x <- model.matrix(suspendmn ~ . - 1, probation_subsample)
+  y <- log(probation_subsample$suspendmn+.5)
+  fit.reg <- regsubsets(x, y, method = "exhaustive", intercept = F)
+  fit.reg.s <- summary(fit.reg)
+  fit.bic <- fit.reg.s$which[which.min(fit.reg.s$bic),]
+  fits.bic <- rbind(fits.bic, fit.bic)
+}
+
+colMeans(fits.bic)
+
+
+lm(log(suspendmn+.5) ~ icrime + priors, probation)
+lm(log(suspendmn+.5) ~ icrime + priors, probation_subsample)
+
+
+crime_type <- c("iassault", "idrug", "iburglary", "igun")
+probation_sub <- probation[icrime %in% crime_type]
+
+lm(log(suspendmn+.5) ~ iassault + idrug + igun + priors, probation_sub)
+
+probation_sub$icrime <- factor(probation_sub$icrime, levels=c("iburglary", "iassault", "idrug", "igun"))
+lm(log(suspendmn+.5) ~ icrime + priors, probation_sub)
+
+```
+
+
+```{r bposi sentence}
+nboot <- 1000
+maxt <- rep(NA, nboot)
+nsample <- nrow(x)
+for(idx in 1:nboot){
+  print(idx)
+  boot_sample <- sample(nsample, nsample, replace = TRUE)
+  X_boot <- x[boot_sample,]
+  Y_boot <- y[boot_sample]
+  find_AIC <- regsubsets(x=X_boot, y=Y_boot, intercept = FALSE,
+                         nbest = 1,       # 1 best model for each number of predictors
+                         nvmax = NULL,    # NULL for no limit on number of variables
+                         force.in = 2, force.out = NULL,
+                         method = "forward")
+  summary.out <- summary(find_AIC)
+  Mhat <- summary.out$which[which.min(summary.out$cp),]
+  refit_lm_boot <- lm(Y_boot ~ X_boot[,Mhat] - 1)
+  centered_lm_boot <- unname(refit_lm_boot$coefficients - lm(y ~ x[,Mhat]-1)$coefficients)
+  AV_Mhat_boot <- vcovHC(refit_lm_boot, type = "HC0")
+  maxt[idx] <- max(abs(centered_lm_boot/sqrt(diag(AV_Mhat_boot))))
+}
+
+K.boot <- quantile(maxt, 0.95)
+```
+
+
+# Diabetes
+```{r diabetes}
+
+pacman::p_load(data.table, sandwich, jtools, xtable, lars, glmnet, 
+               selectiveInference, scales, dplyr, ggplot2)
+
+data("diabetes")
+x <- diabetes$x
+y <- diabetes$y 
+
+M.lasso <- sapply(c("bmi", "map",  "hdl", "ltg"),
+                  function(i) which(colnames(x) == i))
+fit.lasso <- lm(y ~ x[,M.lasso])
+fit.lasso.s <- summary(fit.lasso)
+summ(fit.lasso)
+fit.lasso.sandwich.s <- summ(fit.lasso)
+class(fit.lasso.sandwich.s) <- "summary.lm"
+xtable(fit.lasso.s)
+fit.lasso.s
+
+fit.lar <- lar(x, y)
+fit.lar.beta <- fit.lar$beta[,5]
+fixedLassoInf(x, y, fit.lar.beta, lambda = 190)
+
+coef(glmnet(x,y, lambda= 190/nrow(x), alpha = 1), s = 190/nrow(x))
+fit.glm <- glmnet(x,y, lambda= 190, alpha = 1)
+fit.glm$beta
+
+posi.k <- summary(PoSI::PoSI(x))[1,1]
+fit.lasso$coefficients[2] - posi.k * sqrt(vcovHC(fit.lasso, "HC0")[2,2])
+fit.lasso$coefficients[2] + posi.k * sqrt(vcovHC(fit.lasso, "HC0")[2,2])
+
+posi.k1 <- sapply(M.lasso, function(m) summary(PoSI(x, posi1 = m))[1,1])
+
+# maxt
+library(Rcpp)
+source("../../src/utilities.R")
+Sys.setenv("PKG_LIBS" = "$(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)")
+sourceCpp("../../tmax/src/utilities.cpp")
+
+p <- ncol(x)
+nboot <- 1000
+Hm <- matrix(NA, nrow = p, ncol = nboot)
+Hs <- matrix(NA, nrow = p, ncol = nboot)
+
+# for each variable, (maxk, nboot)
+Hmp <- array(NA, c(p, nboot, p))
+Hsp <- array(NA, c(p, nboot, p))
+
+
+ks <- 1:p
+for(i in seq_along(ks)) {
+  k <- ks[i]
+  print(k)
+  tmp <- max_t_mul_boot_k(x, y, k,
+                          sandwich = T, return_sample = T,
+                          Nboot = nboot, intercept = T,
+                          individual = 1:p)
+  Hs[i, ] <- colMax(tmp$BootSample)
+  Hm[i, ] <- colMax(tmp$BootRank)
+  
+  # Hs1[i, ] <- colMax(tmp$BootSample1)
+  # Hm1[i, ] <- colMax(tmp$BootRank1)
+  Hsp[i,,] <- t(tmp$BootSample1)
+  Hmp[i,,] <- t(tmp$BootRank1)
+  
+}
+
+K <- get_T(Hm = Hs)
+K_norm <- get_T(x, y, M.lasso, Hm, maxk = p, Nboot = nboot, intercept = T, adjust = T)
+
+K <- get_T(Hm = Hsp[,,1])
+K_norm <- get_T(x, y, M.lasso, Hmp[,,1], maxk = p, Nboot = nboot, intercept = T, adjust = T)
+
+
+K1 <- get_T1(Hm = Hsp, M = M.lasso)
+K_norm1 <- get_T1(x, y, M.lasso, Hmp, maxk = p, Nboot = nboot, intercept = T, adjust = T)
+
+
+# saveRDS("../../output_job_talk/diabete_maxt1.rds")
+
+si.ret <- selectiveInference::larInf(lar(x, y), alpha = 0.05, type = "all", k = 4)
+lar(x, y)$beta[,5]
+si.ret$ci
+si <- si.ret$ci[order(si.ret$vars),]
+
+se <- diag(sqrt(vcovHC(fit.lasso, "HC0")))[-1]
+fit.lasso.ci <- summ(fit.lasso, confint = T)$coeftable[-1,]
+
+ret.ci <- 
+  data.table(var = rep(c("BMI", "BP", "S3", "S5"), 5),
+             method = factor(rep(c("t", "berk", "lars", "adjust", "adjust1"), 
+                                 each = 4),
+                             levels = c("t", "berk", "lars", "adjust", "adjust1")),
+             lower = c(fit.lasso.ci[,2], 
+                       fit.lasso$coefficients[-1] - posi.k1 * se,
+                       si[,1],
+                       fit.lasso$coefficients[-1] - K_norm * se,
+                       fit.lasso$coefficients[-1] - K_norm1 * se
+             ),
+             upper = c(fit.lasso.ci[,3], 
+                       fit.lasso$coefficients[-1] + posi.k1 * se,
+                       si[,2],
+                       fit.lasso$coefficients[-1] + K_norm * se,
+                       fit.lasso$coefficients[-1] + K_norm1 * se
+             )
+  )
+
+xtable(ret.ci)
+
+pdf("../../output_job_talk/plot/diabetes.pdf", width = 8, height = 4)
+ret.ci %>%
+  filter(method %in% c("t", "berk", "lars", "adjust1")) %>%
+  ggplot(aes(x = var, col = method)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), position=position_dodge(0.6)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_color_manual(values = hue_pal()(5),
+                     labels = c("Naive", "PoSI", "selectiveInference", "Adjusted1")) +
+  xlab("") +
+  ylab("") + 
+  theme(legend.key=element_blank(),
+        legend.key.width = unit(1,"cm"),
+        legend.background=element_blank(),
+        legend.position = c(0.02, 0.18),
+        legend.direction = "vertical",
+        legend.justification="left",
+        legend.spacing.x = unit(0.05, 'in'),
+        legend.title = element_blank(), 
+        legend.text = element_text(size = 14),
+        axis.text.x = element_text(size = 14))
+dev.off()
+```
+
+
+# Boston
+```{r boston}
+## 1/9/2020: grid search on NOX, log/linear/square on RM
+pacman::p_load(data.table, sandwich, jtools, xtable, lars, glmnet, 
+               selectiveInference, scales, dplyr, ggplot2)
+
+box.cox <- function(y, lambda=0) {
+  if(lambda==0) log(y) else (y^lambda-1)/(lambda-1) }
+
+power.trans <- function(y, lambda = 0) {
+  if(lambda == 0) log(y) else y^lambda
+}
+
+
+data <- read.table("boston.dat")
+
+# data$MEDV <- data$MEDV*1000
+# https://spatial-statistics.com/pace_manuscripts/jeem_ms_dir/pdf/fin_jeem.pdf
+data$MEDV[c(8,39,191,241,438,443,455,506)] <-
+  c(22.1, 24.2, 33, 27, 8.2, 14.8, 14.4, 19)
+data$LSTAT <- data$LSTAT/100
+# data$NOX <- data$NOX*10
+
+fit <- lm(log(MEDV) ~ 
+            I(RM^2) + 
+            AGE +
+            I(log(DIS)) + I(log(RAD)) +
+            TAX +
+            PTRATIO +
+            B +
+            I(log(LSTAT)) +
+            CRIM + ZN + INDUS + CHAS +
+            # I(power.trans(NOX, 2)),
+            I(box.cox(NOX, 2)),
+          data)
+summ(fit)
+summary(fit)
+
+x <- data[, 1:(ncol(data)-1)]
+y <- data[, ncol(data)]
+
+log_y <- log(y)
+y_ <- cbind(y, log_y)
+
+x$DIS <- log(x$DIS)
+x$RAD <- log(x$RAD)
+x$LSTAT <- log(x$LSTAT)
+
+source("../../PoSI_1.0/PoSI/R/PoSI-source-code.R")
+posi.k1 <- sapply(1:ncol(x), function(m) summary(PoSI(x, posi1 = m))[1,1])
+
+# maxt
+library(Rcpp)
+source("../../src/utilities.R")
+Sys.setenv("PKG_LIBS" = "$(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)")
+sourceCpp("../../tmax/src/utilities.cpp")
+
+p <- ncol(x)
+nboot <- 1000
+
+# trans.idx <- which(names(x) %in% c("NOX", "RM"))
+# ps <- 0:5
+# combs <- combn(ps, 2)
+nox_trans <- seq(0,10,length.out = 1000)
+rm_trans <- 0:2
+combs <- t(expand.grid(nox_trans, rm_trans))
+
+Hm <- matrix(0, nrow = ncol(combs), ncol = nboot)
+Hs <- matrix(0, nrow = ncol(combs), ncol = nboot)
+
+# for each variable, (maxk, nboot)
+Hmp <- array(0, c(ncol(combs), nboot, p))
+Hsp <- array(0, c(ncol(combs), nboot, p))
+
+for(j in ncol(y_)) {
+  for(i in 1:ncol(combs)) {
+    if((i %% 500)==0) print(c(j,i))
+    q <- combs[,i]
+    x_ <- x
+    x_$NOX <- box.cox(x$NOX, q[1])
+    x_$RM <- power.trans(x$RM, q[2])
+    
+    tmp <- max_t_mul_boot_k(x_, y_[,j], p,
+                            sandwich = T,
+                            intercept = T, 
+                            Nboot = nboot,
+                            force_in = 1:p,
+                            individual = 1:p)
+    
+    
+    
+    Hs[i, ] <- pmax(Hs[i, ], colMax(tmp$BootSample))
+    Hm[i, ] <- pmax(Hm[i, ], colMax(tmp$BootRank))
+    
+    Hsp[i,,] <- pmax(Hsp[i,,], t(tmp$BootSample1))
+    Hmp[i,,] <- pmax(Hmp[i,,], t(tmp$BootRank1))
+  }  
+}
+
+
+# saveRDS(list(Hm = Hm, Hs = Hs, Hmp = Hmp, Hsp = Hsp),
+# "../../output_job_talk/boston.rds")
+ret <- readRDS("../../output_job_talk/boston.rds")
+Hm <- ret$Hm; Hs <- ret$Hs; Hmp <- ret$Hmp; Hsp <- ret$Hsp
+
+Hm_ <- colMax(Hm)
+
+x_ <- x
+x_$NOX <- box.cox(x$NOX, 2)
+# x_$NOX <- power.trans(x$NOX, 2)
+x_$RM <- power.trans(x$RM, 2)
+
+K <- get_T(Hm = Hs)
+K_norm <- get_T(x_, y_[,2], 1:p, 1, matrix(Hm_, nrow = 1), maxk = 1, Nboot = nboot, intercept = T, adjust = T)
+
+# K1 <- get_T(Hm = Hsp[,,5])
+# K_norm1 <- get_T(x_, y_[,2], 1:p, 3, Hmp[,,5], maxk = length(ps), Nboot = nboot, intercept = T, adjust = T)
+
+K_norm1 <- sapply(1:p, function(i) get_T(x_, y_[,2], 1:p, 1, matrix(colMax(Hmp[,,i]),nrow=1), maxk = 1, Nboot = nboot, intercept = T, adjust = T))
+
+## TODO
+# K1 <- get_T1(Hm = Hsp, M = 1:p)
+# K_norm1 <- get_T1(x_, y, 1:p, 3, Hmp, maxk = length(ps), Nboot = nboot, intercept = T, adjust = T)
+
+
+# saveRDS("../../output_job_talk/diabete_maxt1.rds")
+
+fit <- lm(log_y~as.matrix(x_))
+se <- diag(sqrt(vcovHC(fit, "HC0")))[-1]
+fit.ci <- summ(fit, confint = T)$coeftable[-1,]
+
+# adjusted p
+t.s <- coef(fit)[-1]/se
+pval_norm <- get_p(t.s, x_, y_[,2], 1:p, 1, matrix(Hm_, nrow = 1), maxk = 1, Nboot = nboot, intercept = T, adjust = T)
+pval_norm1 <- sapply(1:p, function(i) get_p(t.s[i], x_, y_[,2], 1:p, 1, matrix(colMax(Hmp[,,i]),nrow=1), maxk = 1, Nboot = nboot, intercept = T, adjust = T))
+
+colnames(x) <- c("CRIM", "RES", "INDUS", "RIVER", "NOX", 
+                 "RM", "AGE", "DEMPC", "DRADH", "TAX", 
+                 "PTR", "BLK", "LSTAT")
+colname_levels <- c("NOX", "RM", "AGE", "CRIM", "RES", "INDUS",
+                    "RIVER", "TAX", "PTR", "BLK", "LSTAT", "DEMPC", "DRADH")
+colname_labels <- c("NOX^2", "RM^2", "AGE", "CRIM", "RES", "INDUS",
+                    "RIVER", "TAX", "PTR", "BLK", "logLSTAT", "logDEMPC", "logDRADH")
+
+ret.p <- 
+  data.table(var = factor(colnames(x),
+                          levels = colname_levels),
+             pval_t = summ(fit)$coeftable[-1, 4],
+             pval_adjust = pval_norm,
+             pval_adjust1 = pval_norm1)
+ret.ci <- 
+  data.table(var = factor(rep(colnames(x), 3),
+                          levels = colname_levels),
+             method = factor(rep(c("t", "adjust", "adjust1"), 
+                                 each = p),
+                             levels = c("t", "adjust", "adjust1")),
+             lower = c(fit.ci[,2], 
+                       # fit$coefficients[-1] - posi.k1 * se,
+                       fit$coefficients[-1] - K_norm * se,
+                       fit$coefficients[-1] - K_norm1 * se
+             ),
+             upper = c(fit.ci[,3], 
+                       # fit$coefficients[-1] + posi.k1 * se,
+                       fit$coefficients[-1] + K_norm * se,
+                       fit$coefficients[-1] + K_norm1 * se
+             )
+  )
+
+xtable(ret.ci)
+
+ret.ci.wide <- dcast(ret.ci, var ~ method, value.var = c("lower", "upper"))
+name.order <- 1
+for(method in c("t","adjust", "adjust1")) {
+  col.idx <- grep(paste0("^", method, "$"), 
+                  sapply(strsplit(names(ret.ci.wide), "_"), tail, 1))
+  ret.ci.wide[, eval(method)] <- 
+    Reduce("*", 
+           ret.ci.wide[, col.idx, 
+                       with=F]) > 0
+  # name.order <- c(name.order, col.idx, ncol(ret.ci.wide))
+}
+ret.ci.wide$K_t <- 1.96
+ret.ci.wide$K_adjust <- K_norm
+ret.ci.wide$K_adjust1 <- K_norm1
+ret.ci.wide <- merge(ret.ci.wide, ret.p, by = "var")
+
+for(method in c("t","adjust", "adjust1")) {
+  col.idx <- grep(paste0("^", method, "$"), 
+                  sapply(strsplit(names(ret.ci.wide), "_"), tail, 1))
+  name.order <- c(name.order, col.idx)
+}
+ret.ci.wide <- ret.ci.wide[,name.order,with=F]
+
+write.csv(ret.ci.wide, "../../output_job_talk/table/boston_grid.csv")
+
+pdf("../../output_job_talk/plot/boston.pdf", width = 9, height = 4)
+
+ret.ci %>%
+  filter(method %in% c("t", "adjust1")) %>%
+  ggplot(aes(x = var, col = method)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), position=position_dodge(0.6)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_color_manual(values = hue_pal()(3),
+                     labels = c("Unadjusted", "Adjusted")) +
+  scale_x_discrete(labels = colname_labels) +
+  xlab("") +
+  ylab("") + 
+  theme(legend.key=element_blank(),
+        legend.key.width = unit(1,"cm"),
+        legend.background=element_blank(),
+        # legend.position = c(0.02, 0.10),
+        legend.position = c(0.75, 0.18),
+        legend.direction = "vertical",
+        legend.justification="left",
+        legend.spacing.x = unit(0.05, 'in'),
+        legend.title = element_blank(), 
+        legend.text = element_text(size = 14),
+        axis.text.x = element_text(size = 14, angle = -30, hjust = -.01),
+        plot.margin = margin(t = 5, b = -10, r = 20)) +
+  coord_cartesian(xlim = c(.5,13.5))
+# coord_cartesian(ylim=c(-12, max(ret.ci$upper)))
+# coord_cartesian(xlim = c(.5,13.5), ylim=c(-.1, .1))
+dev.off()
+
+
+pdf("../../output_job_talk/plot/boston_zoom.pdf", width = 9, height = 4)
+
+ret.ci %>%
+  filter(method %in% c("t", "adjust1")) %>%
+  ggplot(aes(x = var, col = method)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), position=position_dodge(0.6)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_color_manual(values = hue_pal()(3),
+                     labels = c("Unadjusted", "Adjusted")) +
+  scale_x_discrete(labels = colname_labels) +
+  xlab("") +
+  ylab("") + 
+  theme(legend.key=element_blank(),
+        legend.key.width = unit(1,"cm"),
+        legend.background=element_blank(),
+        legend.position = c(0.75, 0.18),
+        legend.direction = "vertical",
+        legend.justification="left",
+        legend.spacing.x = unit(0.05, 'in'),
+        legend.title = element_blank(), 
+        legend.text = element_text(size = 14),
+        axis.text.x = element_text(size = 14, 
+                                   angle = -30,
+                                   hjust = -.01),
+        plot.margin = margin(t = 5, b = -10, r = 20)) +
+  coord_cartesian(xlim = c(.5,13.5), ylim=c(-.01, .01))
+dev.off()
+```
+
+# MTL
+```{r}
+pacman::p_load(data.table, sandwich, jtools, xtable, lars, glmnet, 
+               selectiveInference, scales, dplyr, ggplot2, matrixStats)
+
+load("gonl_tqtl-master/child.df.RData") # phenotype data for children and parents 246 families
+fit.0 <- lm(MTL ~ (Sex + Age + mMTL + fMTL + MAC + PAC)^2, child.df)
+summary(fit.0)
+x <- model.matrix(MTL ~ (Sex + Age + mMTL + fMTL + MAC + PAC)^2, child.df)
+y <- child.df$MTL
+
+
+# final model
+fit.final <- lm(MTL ~ Age + mMTL + fMTL + MAC + PAC, child.df)
+M.final <- 3:7
+
+# maxt
+library(Rcpp)
+source("../../src/utilities.R")
+Sys.setenv("PKG_LIBS" = "$(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)")
+sourceCpp("../../tmax/src/utilities.cpp")
+
+p <- ncol(x) - 1
+nboot <- 1000
+Hm <- matrix(NA, nrow = p, ncol = nboot)
+Hs <- matrix(NA, nrow = p, ncol = nboot)
+
+Hm1 <- matrix(NA, nrow = p, ncol = nboot)
+Hs1 <- matrix(NA, nrow = p, ncol = nboot)
+
+Hmp <- array(NA, c(p, nboot, p))
+Hsp <- array(NA, c(p, nboot, p))
+
+
+ks <- 1:p
+for(i in seq_along(ks)) {
+  k <- ks[i]
+  print(k)
+  tmp <- max_t_mul_boot_k(x[,-1], y, k,
+                          sandwich = T, return_sample = T, 
+                          Nboot = nboot, intercept = T,
+                          individual = 1:p)
+  Hs[i, ] <- colMax(tmp$BootSample)
+  Hm[i, ] <- colMax(tmp$BootRank)
+  
+  # Hs1[i, ] <- colMax(tmp$BootSample1)
+  # Hm1[i, ] <- colMax(tmp$BootRank1)
+  Hsp[i,,] <- t(tmp$BootSample1)
+  Hmp[i,,] <- t(tmp$BootRank1)
+  
+}
+
+# saveRDS(list(Hm = Hm, Hs = Hs, Hmp = Hmp, Hsp = Hsp),
+# "../../output_job_talk/mtl.rds")
+ret <- readRDS("../../output_job_talk/mtl.rds")
+Hm <- ret$Hm; Hs <- ret$Hs; Hmp <- ret$Hmp; Hsp <- ret$Hsp
+
+K_norm <- get_T(x[,-1], y, M.final, NULL, Hm, maxk = p, Nboot = nboot, intercept = T, adjust = T)
+
+K_norm1 <- sapply(M.final, function(i) get_T(x[,-1], y, M.final, NULL, Hmp[,,i], maxk = p, Nboot = nboot, intercept = T, adjust = T))
+
+
+se <- diag(sqrt(vcovHC(fit.final, "HC0")))[-1]
+fit.final.ci <- summ(fit.final, confint = T)$coeftable[-1,]
+
+# adjusted p
+t.s <- coef(fit.final)[-1]/se
+pval_norm <- get_p(t.s, x[,-1], y, M.final, NULL, Hm, maxk = p, Nboot = nboot, intercept = T, adjust = T)
+pval_norm1 <- sapply(1:length(M.final), function(i) get_p(t.s[i], x[,-1], y, M.final, NULL, Hmp[,,M.final[i]], maxk = p, Nboot = nboot, intercept = T, adjust = T))
+
+
+ret.p <- 
+  data.table(var = factor(colnames(x)[M.final], 
+                          levels = colnames(x)[M.final]),
+             pval_t = summ(fit.final)$coeftable[-1, 4],
+             pval_adjust = pval_norm,
+             pval_adjust1 = pval_norm1)
+
+ret.ci <- 
+  data.table(var = factor(rep(colnames(x)[M.final], 3),
+                          levels = colnames(x)[M.final]),
+             method = factor(rep(c("t", "adjust", "adjust1"), 
+                                 each = length(M.final)),
+                             levels = c("t", "adjust", "adjust1")),
+             lower = c(fit.final.ci[,2], 
+                       fit.final$coefficients[-1] - K_norm * se,
+                       fit.final$coefficients[-1] - K_norm1 * se
+             ),
+             upper = c(fit.final.ci[,3], 
+                       fit.final$coefficients[-1] + K_norm * se,
+                       fit.final$coefficients[-1] + K_norm1 * se
+             )
+  )
+
+xtable(ret.ci)
+ret.ci.wide <- dcast(ret.ci, var ~ method, value.var = c("lower", "upper"))
+name.order <- 1
+for(method in c("t", "adjust", "adjust1")) {
+  col.idx <- grep(paste0("^", method, "$"), 
+                  sapply(strsplit(names(ret.ci.wide), "_"), tail, 1))
+  ret.ci.wide[, eval(method)] <- 
+    Reduce("*", 
+           ret.ci.wide[, col.idx, 
+                       with=F]) > 0
+  name.order <- c(name.order, col.idx, ncol(ret.ci.wide))
+}
+ret.ci.wide <- ret.ci.wide[,name.order,with=F]
+
+
+ret.ci.wide <- dcast(ret.ci, var ~ method, value.var = c("lower", "upper"))
+name.order <- 1
+for(method in c("t","adjust", "adjust1")) {
+  col.idx <- grep(paste0("^", method, "$"), 
+                  sapply(strsplit(names(ret.ci.wide), "_"), tail, 1))
+  ret.ci.wide[, eval(method)] <- 
+    Reduce("*", 
+           ret.ci.wide[, col.idx, 
+                       with=F]) > 0
+  # name.order <- c(name.order, col.idx, ncol(ret.ci.wide))
+}
+ret.ci.wide$K_t <- 1.96
+ret.ci.wide$K_adjust <- K_norm
+ret.ci.wide$K_adjust1 <- K_norm1
+ret.ci.wide <- merge(ret.ci.wide, ret.p, by = "var")
+
+for(method in c("t","adjust", "adjust1")) {
+  col.idx <- grep(paste0("^", method, "$"), 
+                  sapply(strsplit(names(ret.ci.wide), "_"), tail, 1))
+  name.order <- c(name.order, col.idx)
+}
+ret.ci.wide <- ret.ci.wide[,name.order,with=F]
+
+write.csv(ret.ci.wide, "../../output_job_talk/table/mtl.csv")
+
+pdf("../../output_job_talk/plot/mtl.pdf", width = 8, height = 4)
+ret.ci %>%
+  filter(method %in% c("t", "berk", "adjust1")) %>%
+  ggplot(aes(x = var, col = method)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), position=position_dodge(0.6)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_color_manual(values = hue_pal()(4),
+                     labels = c("Naive", "PoSI", "Adjusted1")) +
+  xlab("") +
+  ylab("") + 
+  theme(legend.key=element_blank(),
+        legend.key.width = unit(1,"cm"),
+        legend.background=element_blank(),
+        legend.position = c(1, 0.85),
+        legend.direction = "vertical",
+        legend.justification="right",
+        legend.spacing.x = unit(0.05, 'in'),
+        legend.title = element_blank(), 
+        legend.text = element_text(size = 14),
+        axis.text.x = element_text(size = 14))
+dev.off()
+
+```

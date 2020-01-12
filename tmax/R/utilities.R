@@ -349,12 +349,12 @@ get_T <- function(xx = NULL,
   }
 }
 
-### TODO: buggy
-get_T1 <- function(xx = NULL, 
+get_p <- function(tval,
+                  xx = NULL, 
                   yy = NULL, 
-                  M = NULL, 
+                  M = NULL,
                   transformation = NULL,
-                  Hmp, 
+                  Hm,
                   maxk = nrow(Hm), 
                   Nboot = 200, 
                   alpha = 0.05,
@@ -362,9 +362,12 @@ get_T1 <- function(xx = NULL,
                   adjust = F,
                   force_in = NULL) {
   # TODO: force.in
-  Hmp_ <- Hmp[,,M,drop=F]
-  Hstar <- apply(Hmp_, c(2,3), cummax)
-  dim(Hstar) <- dim(Hmp_)
+  # fit <- lm(yy ~ xx[, M])
+  # se <- diag(sqrt(vcovHC(fit, "HC0")))
+  # tval <- (coef(fit)/se)[-1]
+  
+  Hstar <- apply(Hm, 2, cummax)
+  dim(Hstar) <- dim(Hm)
   
   if(adjust) {
     if(class(M) == "numeric" | class(M) == "integer") {
@@ -373,37 +376,94 @@ get_T1 <- function(xx = NULL,
       M[tmp] <- T
     }
     
+    Hsmax <- rep(0, Nboot)
+    for(i in 1:maxk){
+      Hscdf <- ecdf(Hstar[i,])
+      Hsmax <- pmax(Hsmax, Hscdf(Hm[i,]))
+    }
+    
+    pval <- seq(0,1,0.001)
+    K <- quantile(Hsmax, pval)
+
     if(is.null(transformation)) {
       ss <- sum(M)
     } else {
       ss <- transformation
     }
-    Hsmax <- matrix(0, Nboot*ss, nrow = sum(M), ncol = Nboot)
-    for(j in 1:sum(M)) {
-      for(i in 1:maxk){
-        Hscdf <- ecdf(Hstar[i,,j])
-        Hsmax[j,] <- pmax(Hsmax[j,], Hscdf(Hmp_[i,,j]))
-      }
-    }
-      
-    K <- apply(Hsmax, 1, quantile, 1-alpha)
+
+    Hmhat <- max_t_mul_boot_M(xx, yy, M=M, Nboot=Nboot, intercept = intercept)$BootSample
+    # Hmhat_cdf <- ecdf(Hmhat)
+    # Hm_tval <- (Hmhat_cdf(abs(tval)))
+    # # Hmm_tval <- quantile(Hm[5,], Hm_tval)
+    # Hstar_tval <- quantile(Hstar[ss, ], Hm_tval)
+    # Hsmax <- Hsmax[order(Hsmax)]
+    # 1-Hsmax[Hstar_tval]
     
-    Hmhat <- max_t_mul_boot_M(xx, yy, M=M, Nboot=Nboot, 
-                              intercept = intercept, individual = T)$BootSample1
-    Hmhat <- t(apply(matrix(Hmhat, ncol=Nboot), 1, sort))
+    Hmhat <- Hmhat[order(Hmhat)]
+    Hmhat_cdf <- ecdf(Hmhat[quantile(Hstar[ss,], K)])
+    return(1-Hmhat_cdf(abs(tval)))
     
-    if(is.null(transformation)) {
-      # Kalpha <- mapply(function(Mj, k) quantile(Hstar[ss,,Mj], k), 1:ss, K)
-      # mapply(function(Mj, k) Hmhat[Mj, k], 1:ss, Kalpha)
-      return(mapply(function(Mj, k) Hmhat[Mj, quantile(Hstar[ss,,Mj], k)], 1:ss, K)) 
-    } else {
-      return(mapply(function(Mj, k) Hmhat[Mj, quantile(Hstar[ss,,Mj], k)], which(M), K)) 
-    }
-    
-    # Hmhat <- ecdf(max_t_mul_boot_M(xx, yy, M=M, Nboot=Nboot, intercept = intercept)$BootSample)
-    # return(quantile(Hmhat, Hs(K)) )
   } else {
-    K <- apply(t(Hmp_[maxk,,]), 1, quantile, 1-alpha)
-    return(K)
+    Hstar_cdf <- ecdf(Hstar[maxk, ])
+    return(1-Hstar_cdf(tval))
   }
 }
+
+### TODO: buggy
+# get_T1 <- function(xx = NULL, 
+#                   yy = NULL, 
+#                   M = NULL, 
+#                   transformation = NULL,
+#                   Hmp, 
+#                   maxk = nrow(Hm), 
+#                   Nboot = 200, 
+#                   alpha = 0.05,
+#                   intercept = T,
+#                   adjust = F,
+#                   force_in = NULL) {
+#   # TODO: force.in
+#   Hmp_ <- Hmp[,,M,drop=F]
+#   Hstar <- apply(Hmp_, c(2,3), cummax)
+#   dim(Hstar) <- dim(Hmp_)
+#   
+#   if(adjust) {
+#     if(class(M) == "numeric" | class(M) == "integer") {
+#       tmp <- M
+#       M <- rep(F, ncol(xx))
+#       M[tmp] <- T
+#     }
+#     
+#     if(is.null(transformation)) {
+#       ss <- sum(M)
+#     } else {
+#       ss <- transformation
+#     }
+#     Hsmax <- matrix(0, Nboot*ss, nrow = sum(M), ncol = Nboot)
+#     for(j in 1:sum(M)) {
+#       for(i in 1:maxk){
+#         Hscdf <- ecdf(Hstar[i,,j])
+#         Hsmax[j,] <- pmax(Hsmax[j,], Hscdf(Hmp_[i,,j]))
+#       }
+#     }
+#       
+#     K <- apply(Hsmax, 1, quantile, 1-alpha)
+#     
+#     Hmhat <- max_t_mul_boot_M(xx, yy, M=M, Nboot=Nboot, 
+#                               intercept = intercept, individual = T)$BootSample1
+#     Hmhat <- t(apply(matrix(Hmhat, ncol=Nboot), 1, sort))
+#     
+#     if(is.null(transformation)) {
+#       # Kalpha <- mapply(function(Mj, k) quantile(Hstar[ss,,Mj], k), 1:ss, K)
+#       # mapply(function(Mj, k) Hmhat[Mj, k], 1:ss, Kalpha)
+#       return(mapply(function(Mj, k) Hmhat[Mj, quantile(Hstar[ss,,Mj], k)], 1:ss, K)) 
+#     } else {
+#       return(mapply(function(Mj, k) Hmhat[Mj, quantile(Hstar[ss,,Mj], k)], which(M), K)) 
+#     }
+#     
+#     # Hmhat <- ecdf(max_t_mul_boot_M(xx, yy, M=M, Nboot=Nboot, intercept = intercept)$BootSample)
+#     # return(quantile(Hmhat, Hs(K)) )
+#   } else {
+#     K <- apply(t(Hmp_[maxk,,]), 1, quantile, 1-alpha)
+#     return(K)
+#   }
+# }

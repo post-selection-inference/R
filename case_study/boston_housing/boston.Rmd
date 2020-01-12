@@ -1,0 +1,292 @@
+---
+title: "PoSI Case Study: Boston Housing"
+author: ''
+output:
+  html_document:
+    code_folding: show
+    highlight: haddock
+    theme: lumen
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+    number_sections: true
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+bibliography: bibliography.bib
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.path = "fig/")
+if (!require("pacman")) install.packages(pacman)
+pacman::p_load(data.table, sandwich, jtools, xtable, scales, dplyr, ggplot2, devtools, matrixStats)
+
+if (!require("tmax")) devtools::install_github(repo="post-selection-inference/R", subdir = "tmax")
+library(tmax)
+```
+
+
+This page demonstrate the PoSI on the Boston Housing data from @harrison1978hedonic with amendments by @gilley1996harrison.
+
+# The Boston housing data
+The data description is as follows.
+
+
+Variable     |  Description  
+-------------|--------------------------------------------------------------------
+ CRIM        |  crime rate  
+ ZN          |  proportion of residential land zoned for lots over 25,000 sq. ft 
+ INDUS       |  proportion of non-retail business acres 
+ CHAS        |  Charles River dummy variable (=1 if tract bounds river; 0 otherwise) 
+ NOX         |  nitric oxides concentration, pphm 
+ RM          |  average number of rooms per dwelling 
+ AGE         |  proportion of owner-occupied units built prior to 1940 
+ DIS         |  weighted distances to five Boston employment centers 
+ RAD         |  index of accessibility to radial highways 
+ TAX         |  full-value property tax rate per $10,000 
+ PTRATIO     |  pupil teacher ratio 
+ B           |  1000*(Bk-0.63)^2 where Bk is the proportion of blacks
+ LSTAT       |  percent lower status population 
+ MEDV        |  median value of owner occupied homes in $1000's 
+
+```{r aux}
+box.cox <- function(y, lambda=0) {
+  if(lambda==0) log(y) else (y^lambda-1)/(lambda-1) }
+
+power.trans <- function(y, lambda = 0) {
+  if(lambda == 0) log(y) else y^lambda
+}
+```
+
+```{r read data}
+data <- read.table("boston.dat")
+
+# https://spatial-statistics.com/pace_manuscripts/jeem_ms_dir/pdf/fin_jeem.pdf
+data$MEDV[c(8,39,191,241,438,443,455,506)] <-
+  c(22.1, 24.2, 33, 27, 8.2, 14.8, 14.4, 19)
+data$LSTAT <- data$LSTAT/100
+
+# the final model
+fit <- lm(log(MEDV) ~ 
+            I(RM^2) + 
+            AGE +
+            I(log(DIS)) + I(log(RAD)) +
+            TAX +
+            PTRATIO +
+            B +
+            I(log(LSTAT)) +
+            CRIM + ZN + INDUS + CHAS +
+            I(box.cox(NOX, 2)),
+          data)
+summ(fit)
+summary(fit)
+```
+
+# PoSI
+
+We provide PoSI adjustment considering selection of
+
+* Log transformation of the response `MEDV`
+* Grid search of Box-Cox transformation of the variable of interest `NOX`
+* Log/linear/quadratic transformation of `RM`
+
+```{r prep data}
+x <- data[, 1:(ncol(data)-1)]
+y <- data[, ncol(data)]
+
+log_y <- log(y)
+y_ <- cbind(y, log_y)
+
+x$DIS <- log(x$DIS)
+x$RAD <- log(x$RAD)
+x$LSTAT <- log(x$LSTAT)
+
+p <- ncol(x)
+nboot <- 1000
+```
+
+
+```{r posi}
+# grid search from 0 to 10 with 1000 grid points
+nox_trans <- seq(0,10,length.out = 1000)
+# log/linear/quadratic transformation for RM
+rm_trans <- 0:2
+combs <- t(expand.grid(nox_trans, rm_trans))
+
+Hm <- matrix(0, nrow = ncol(combs), ncol = nboot)
+Hs <- matrix(0, nrow = ncol(combs), ncol = nboot)
+
+# for each variable, (maxk, nboot)
+Hmp <- array(0, c(ncol(combs), nboot, p))
+Hsp <- array(0, c(ncol(combs), nboot, p))
+
+for(j in ncol(y_)) {
+  for(i in 1:ncol(combs)) {
+    if((i %% 500)==0) print(c(j,i))
+    q <- combs[,i]
+    x_ <- x
+    x_$NOX <- box.cox(x$NOX, q[1])
+    x_$RM <- power.trans(x$RM, q[2])
+    
+    tmp <- max_t_mul_boot_k(x_, y_[,j], p,
+                            sandwich = T,
+                            intercept = T, 
+                            Nboot = nboot,
+                            force_in = 1:p,
+                            individual = 1:p)
+    
+    
+    
+    Hs[i, ] <- pmax(Hs[i, ], colMax(tmp$BootSample))
+    Hm[i, ] <- pmax(Hm[i, ], colMax(tmp$BootRank))
+    
+    Hsp[i,,] <- pmax(Hsp[i,,], t(tmp$BootSample1))
+    Hmp[i,,] <- pmax(Hmp[i,,], t(tmp$BootRank1))
+  }  
+}
+
+# saveRDS(list(Hm = Hm, Hs = Hs, Hmp = Hmp, Hsp = Hsp), "boston.rds")
+```
+
+```{r posi table}
+ret <- readRDS("boston.rds")
+Hm <- ret$Hm; Hs <- ret$Hs; Hmp <- ret$Hmp; Hsp <- ret$Hsp
+
+Hm_ <- colMax(Hm)
+
+x_ <- x
+x_$NOX <- box.cox(x$NOX, 2)
+# x_$NOX <- power.trans(x$NOX, 2)
+x_$RM <- power.trans(x$RM, 2)
+
+# PoSI constant with prepivot
+K <- get_T(Hm = Hs)
+# PoSI constant without prepivot
+K_norm <- get_T(x_, y_[,2], 1:p, 1, matrix(Hm_, nrow = 1), maxk = 1, Nboot = nboot, intercept = T, adjust = T)
+# PoSI1 constant with prepivot
+K_norm1 <- sapply(1:p, function(i) get_T(x_, y_[,2], 1:p, 1, matrix(colMax(Hmp[,,i]),nrow=1), maxk = 1, Nboot = nboot, intercept = T, adjust = T))
+
+
+fit <- lm(log_y~as.matrix(x_))
+se <- diag(sqrt(vcovHC(fit, "HC0")))[-1]
+fit.ci <- summ(fit, confint = T)$coeftable[-1,]
+
+# adjusted p
+t.s <- coef(fit)[-1]/se
+pval_norm <- get_p(t.s, x_, y_[,2], 1:p, 1, matrix(Hm_, nrow = 1), maxk = 1, Nboot = nboot, intercept = T, adjust = T)
+pval_norm1 <- sapply(1:p, function(i) get_p(t.s[i], x_, y_[,2], 1:p, 1, matrix(colMax(Hmp[,,i]),nrow=1), maxk = 1, Nboot = nboot, intercept = T, adjust = T))
+
+colnames(x) <- c("CRIM", "RES", "INDUS", "RIVER", "NOX", 
+                 "RM", "AGE", "DEMPC", "DRADH", "TAX", 
+                 "PTR", "BLK", "LSTAT")
+colname_levels <- c("NOX", "RM", "AGE", "CRIM", "RES", "INDUS",
+                    "RIVER", "TAX", "PTR", "BLK", "LSTAT", "DEMPC", "DRADH")
+colname_labels <- c("NOX^2", "RM^2", "AGE", "CRIM", "RES", "INDUS",
+                    "RIVER", "TAX", "PTR", "BLK", "logLSTAT", "logDEMPC", "logDRADH")
+
+ret.p <- 
+  data.table(var = factor(colnames(x),
+                          levels = colname_levels),
+             pval_t = summ(fit)$coeftable[-1, 4],
+             pval_adjust = pval_norm,
+             pval_adjust1 = pval_norm1)
+ret.ci <- 
+  data.table(var = factor(rep(colnames(x), 3),
+                          levels = colname_levels),
+             method = factor(rep(c("t", "adjust", "adjust1"), 
+                                 each = p),
+                             levels = c("t", "adjust", "adjust1")),
+             lower = c(fit.ci[,2], 
+                       # fit$coefficients[-1] - posi.k1 * se,
+                       fit$coefficients[-1] - K_norm * se,
+                       fit$coefficients[-1] - K_norm1 * se
+             ),
+             upper = c(fit.ci[,3], 
+                       # fit$coefficients[-1] + posi.k1 * se,
+                       fit$coefficients[-1] + K_norm * se,
+                       fit$coefficients[-1] + K_norm1 * se
+             )
+  )
+
+xtable(ret.ci)
+
+ret.ci.wide <- dcast(ret.ci, var ~ method, value.var = c("lower", "upper"))
+name.order <- 1
+for(method in c("t","adjust", "adjust1")) {
+  col.idx <- grep(paste0("^", method, "$"), 
+                  sapply(strsplit(names(ret.ci.wide), "_"), tail, 1))
+  ret.ci.wide[, eval(method)] <- 
+    Reduce("*", 
+           ret.ci.wide[, col.idx, 
+                       with=F]) > 0
+  # name.order <- c(name.order, col.idx, ncol(ret.ci.wide))
+}
+ret.ci.wide$K_t <- 1.96
+ret.ci.wide$K_adjust <- K_norm
+ret.ci.wide$K_adjust1 <- K_norm1
+ret.ci.wide <- merge(ret.ci.wide, ret.p, by = "var")
+
+for(method in c("t","adjust", "adjust1")) {
+  col.idx <- grep(paste0("^", method, "$"), 
+                  sapply(strsplit(names(ret.ci.wide), "_"), tail, 1))
+  name.order <- c(name.order, col.idx)
+}
+ret.ci.wide <- ret.ci.wide[,name.order,with=F]
+```
+
+
+```{r plot}
+ret.ci %>%
+  filter(method %in% c("t", "adjust1")) %>%
+  ggplot(aes(x = var, col = method)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), position=position_dodge(0.6)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_color_manual(values = hue_pal()(3),
+                     labels = c("Unadjusted", "Adjusted")) +
+  scale_x_discrete(labels = colname_labels) +
+  xlab("") +
+  ylab("") + 
+  theme(legend.key=element_blank(),
+        legend.key.width = unit(1,"cm"),
+        legend.background=element_blank(),
+        # legend.position = c(0.02, 0.10),
+        legend.position = c(0.75, 0.18),
+        legend.direction = "vertical",
+        legend.justification="left",
+        legend.spacing.x = unit(0.05, 'in'),
+        legend.title = element_blank(), 
+        legend.text = element_text(size = 14),
+        axis.text.x = element_text(size = 14, angle = -30, hjust = -.01),
+        plot.margin = margin(t = 5, b = -10, r = 20)) +
+  coord_cartesian(xlim = c(.5,13.5))
+
+
+ret.ci %>%
+  filter(method %in% c("t", "adjust1")) %>%
+  ggplot(aes(x = var, col = method)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), position=position_dodge(0.6)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_color_manual(values = hue_pal()(3),
+                     labels = c("Unadjusted", "Adjusted")) +
+  scale_x_discrete(labels = colname_labels) +
+  xlab("") +
+  ylab("") + 
+  theme(legend.key=element_blank(),
+        legend.key.width = unit(1,"cm"),
+        legend.background=element_blank(),
+        legend.position = c(0.75, 0.18),
+        legend.direction = "vertical",
+        legend.justification="left",
+        legend.spacing.x = unit(0.05, 'in'),
+        legend.title = element_blank(), 
+        legend.text = element_text(size = 14),
+        axis.text.x = element_text(size = 14, 
+                                   angle = -30,
+                                   hjust = -.01),
+        plot.margin = margin(t = 5, b = -10, r = 20)) +
+  coord_cartesian(xlim = c(.5,13.5), ylim=c(-.01, .01))
+
+```
