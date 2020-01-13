@@ -22,14 +22,14 @@ editor_options:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, fig.path = "fig/")
 if (!require("pacman")) install.packages(pacman)
-pacman::p_load(data.table, sandwich, jtools, xtable, scales, dplyr, ggplot2, devtools, matrixStats)
+pacman::p_load(data.table, sandwich, jtools, xtable, scales, dplyr, ggplot2, devtools, matrixStats, knitr, kableExtra)
 
 if (!require("tmax")) devtools::install_github(repo="post-selection-inference/R", subdir = "tmax")
 library(tmax)
 ```
 
 
-This page demonstrate the PoSI on the Boston Housing data from @harrison1978hedonic with amendments by @gilley1996harrison.
+This file demonstrates PoSI on the Boston Housing data from @harrison1978hedonic with amendments by @gilley1996harrison.
 
 # The Boston housing data
 The data description is as follows.
@@ -69,6 +69,7 @@ data$MEDV[c(8,39,191,241,438,443,455,506)] <-
   c(22.1, 24.2, 33, 27, 8.2, 14.8, 14.4, 19)
 data$LSTAT <- data$LSTAT/100
 
+
 # the final model
 fit <- lm(log(MEDV) ~ 
             I(RM^2) + 
@@ -81,17 +82,19 @@ fit <- lm(log(MEDV) ~
             CRIM + ZN + INDUS + CHAS +
             I(box.cox(NOX, 2)),
           data)
-summ(fit)
+# summary table of the final model
 summary(fit)
+# summary table of the final model with sandwich
+summ(fit, robust = "HC0")
 ```
 
 # PoSI
 
-We provide PoSI adjustment considering selection of
+We provide PoSI adjustment considering the following transformations mentioned in the @harrison1978hedonic.
 
-* Log transformation of the response `MEDV`
-* Grid search of Box-Cox transformation of the variable of interest `NOX`
-* Log/linear/quadratic transformation of `RM`
+* Log transformation of the response `MEDV`;
+* Grid search of Box-Cox transformation of the variable of interest `NOX`;
+* Log/linear/quadratic transformation of `RM`.
 
 ```{r prep data}
 x <- data[, 1:(ncol(data)-1)]
@@ -109,7 +112,7 @@ nboot <- 1000
 ```
 
 
-```{r posi}
+```{r posi, eval=F}
 # grid search from 0 to 10 with 1000 grid points
 nox_trans <- seq(0,10,length.out = 1000)
 # log/linear/quadratic transformation for RM
@@ -148,36 +151,52 @@ for(j in ncol(y_)) {
   }  
 }
 
-# saveRDS(list(Hm = Hm, Hs = Hs, Hmp = Hmp, Hsp = Hsp), "boston.rds")
-```
-
-```{r posi table}
-ret <- readRDS("boston.rds")
-Hm <- ret$Hm; Hs <- ret$Hs; Hmp <- ret$Hmp; Hsp <- ret$Hsp
-
-Hm_ <- colMax(Hm)
-
+# final model
 x_ <- x
 x_$NOX <- box.cox(x$NOX, 2)
 # x_$NOX <- power.trans(x$NOX, 2)
 x_$RM <- power.trans(x$RM, 2)
 
-# PoSI constant with prepivot
-K <- get_T(Hm = Hs)
-# PoSI constant without prepivot
-K_norm <- get_T(x_, y_[,2], 1:p, 1, matrix(Hm_, nrow = 1), maxk = 1, Nboot = nboot, intercept = T, adjust = T)
-# PoSI1 constant with prepivot
-K_norm1 <- sapply(1:p, function(i) get_T(x_, y_[,2], 1:p, 1, matrix(colMax(Hmp[,,i]),nrow=1), maxk = 1, Nboot = nboot, intercept = T, adjust = T))
-
-
 fit <- lm(log_y~as.matrix(x_))
 se <- diag(sqrt(vcovHC(fit, "HC0")))[-1]
 fit.ci <- summ(fit, confint = T)$coeftable[-1,]
+
+
+# PoSI constant without prepivot
+K <- get_T(Hm = Hs)
+# PoSI constant with prepivot
+K_norm <- get_T(x_, y_[,2], 1:p, 1, matrix(colMax(Hm), nrow = 1), maxk = 1, Nboot = nboot, intercept = T, adjust = T)
+# PoSI1 constant with prepivot
+K_norm1 <- sapply(1:p, function(i) get_T(x_, y_[,2], 1:p, 1, matrix(colMax(Hmp[,,i]),nrow=1), maxk = 1, Nboot = nboot, intercept = T, adjust = T))
 
 # adjusted p
 t.s <- coef(fit)[-1]/se
 pval_norm <- get_p(t.s, x_, y_[,2], 1:p, 1, matrix(Hm_, nrow = 1), maxk = 1, Nboot = nboot, intercept = T, adjust = T)
 pval_norm1 <- sapply(1:p, function(i) get_p(t.s[i], x_, y_[,2], 1:p, 1, matrix(colMax(Hmp[,,i]),nrow=1), maxk = 1, Nboot = nboot, intercept = T, adjust = T))
+
+saveRDS(list(K_norm = K_norm, K_norm1 = K_norm1,
+             pval_norm = pval_norm, pval_norm1 = pval_norm1),
+        "boston_PoSI.RDS")
+```
+
+# Report
+
+After PoSI or PoSI1 adjustment, `RIVER` and `BLK` change from siginificant at 0.05 level to insignificant. The conslusion for the variable of interest does not change.
+
+```{r posi table}
+ret <- readRDS("boston_PoSI.RDS")
+K_norm <- ret$K_norm; K_norm1 <- ret$K_norm1
+pval_norm <- ret$pval_norm; pval_norm1 <- ret$pval_norm1
+
+# final model
+x_ <- x
+x_$NOX <- box.cox(x$NOX, 2)
+# x_$NOX <- power.trans(x$NOX, 2)
+x_$RM <- power.trans(x$RM, 2)
+
+fit <- lm(log_y~as.matrix(x_))
+se <- diag(sqrt(vcovHC(fit, "HC0")))[-1]
+fit.ci <- summ(fit, confint = T)$coeftable[-1,]
 
 colnames(x) <- c("CRIM", "RES", "INDUS", "RIVER", "NOX", 
                  "RM", "AGE", "DEMPC", "DRADH", "TAX", 
@@ -211,7 +230,7 @@ ret.ci <-
              )
   )
 
-xtable(ret.ci)
+# xtable(ret.ci)
 
 ret.ci.wide <- dcast(ret.ci, var ~ method, value.var = c("lower", "upper"))
 name.order <- 1
@@ -235,6 +254,23 @@ for(method in c("t","adjust", "adjust1")) {
   name.order <- c(name.order, col.idx)
 }
 ret.ci.wide <- ret.ci.wide[,name.order,with=F]
+
+changed.idx <- as.matrix(ret.ci.wide[, .SD, .SDcols = c("t", "adjust1")])
+changed.idx[changed.idx] <- 1; changed.idx[!changed.idx] <- -1
+changed.idx <- which(rowProds(changed.idx) != 1)
+
+# the unadjusted with sandwich
+kable(ret.ci.wide[, 1:6]) %>% 
+  kable_styling("striped", full_width = F) %>%
+  row_spec(changed.idx, bold = T, color = "white", background = "#D7261E")
+# PoSI adjusted 
+kable(ret.ci.wide[, c(1, 7:11)]) %>% 
+  kable_styling("striped", full_width = F) %>%
+  row_spec(changed.idx, bold = T, color = "white", background = "#D7261E")
+# PoSI1 adjusted
+kable(ret.ci.wide[, c(1, 12:16)]) %>% 
+  kable_styling("striped", full_width = F) %>%
+  row_spec(changed.idx, bold = T, color = "white", background = "#D7261E")
 ```
 
 
