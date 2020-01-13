@@ -29,7 +29,7 @@ library(tmax)
 ```
 
 
-This file demonstrates PoSI on the Telomere Length (TL) analysis by @nersisyan2019wgs. The goal of the analysis is to study the inheritance patterns and associated genetic factors. The data and scripts of their analyses are available on [Github](https://github.com/lilit-nersisyan/gonl_tqtl). Here we focus on the first part of the multiple linear regression (MLR) analysis to understand the TL inhereitance patterns.
+This file demonstrates PoSI on the Telomere Length (TL) analysis by @nersisyan2019wgs. The goal of the analysis is to study the inheritance patterns and associated genetic factors. The data and scripts of their analyses are available on [Github](https://github.com/lilit-nersisyan/gonl_tqtl). Here we focus on the first part of the multiple linear regression (MLR) analysis to understand the TL inheritance patterns. The article concludes from the analysis that TL is a mostly heritable trait, more from mother's and less from father's. TL is also age-related and linked to mother's age at conception. The conclusion is based on regression analysis but with covariate selection that invalidates the classical inference. After our post-selection adjustment to the inference, only the inheritance factors are significant controlling for other covariates. 
 
 # MTL data
 
@@ -106,9 +106,7 @@ for(i in seq_along(ks)) {
                           individual = 1:p)
   Hs[i, ] <- colMax(tmp$BootSample)
   Hm[i, ] <- colMax(tmp$BootRank)
-  
-  # Hs1[i, ] <- colMax(tmp$BootSample1)
-  # Hm1[i, ] <- colMax(tmp$BootRank1)
+
   Hsp[i,,] <- t(tmp$BootSample1)
   Hmp[i,,] <- t(tmp$BootRank1)
   
@@ -120,7 +118,7 @@ K_norm <- get_T(x[,-1], y, M.final, NULL, Hm, maxk = p, Nboot = nboot, intercept
 K_norm1 <- sapply(M.final, function(i) get_T(x[,-1], y, M.final, NULL, Hmp[,,i], maxk = p, Nboot = nboot, intercept = T, adjust = T))
 
 # adjusted p
-se <- diag(sqrt(vcovHC(fit.final, "HC0")))[-1]
+se <- sqrt(diag(vcovHC(fit.final, "HC0")))[-1]
 t.s <- coef(fit.final)[-1]/se
 pval_norm <- get_p(t.s, x[,-1], y, M.final, NULL, Hm, maxk = p, Nboot = nboot, intercept = T, adjust = T)
 pval_norm1 <- sapply(1:length(M.final), function(i) get_p(t.s[i], x[,-1], y, M.final, NULL, Hmp[,,M.final[i]], maxk = p, Nboot = nboot, intercept = T, adjust = T))
@@ -132,15 +130,15 @@ saveRDS(list(K_norm = K_norm, K_norm1 = K_norm1,
 
 # Report
 
-After PoSI or PoSI1 adjustment, `AGE` and `MAC` change from siginificant at 0.05 level to insignificant.
+After PoSI or PoSI1 adjustment, `AGE` and `MAC` change from significant at 0.05 level to insignificant. The adjustment changes the conclusion of the study to TL is a heritable trait only. The heritable nature of telomeres, as the authors claim, echoes prior studies. Age and parents' ages at conception, however, are not significant factors. The authors claim there is a lack of evidence on effect of MAC in previous studies and their MLR analysis (with covariate selection) confirms the association of MAC with offspring MTL, suggesting that further investigation. Nevertheless, after PoSI adjustment for selection, MAC is not significant anymore. 
 
 
 Variable       |  Unadjusted | Adjusted  
 -------------  | ------- | -------
-Age            |  &#10003; | &#10007;
+$\color{red}{\text{Age}}$            |  &#10003; | &#10007;
 mMTL           | &#10003; | &#10003;
 fMTL           | &#10003; | &#10003;
-MAC            | &#10003; | &#10007;
+$\color{red}{\text{MAC}}$            | &#10003; | &#10007;
 PAC            | &#10007; | &#10007;
 
 
@@ -151,7 +149,7 @@ pval_norm <- ret$pval_norm; pval_norm1 <- ret$pval_norm1
 
 fit.final <- lm(MTL ~ Age + mMTL + fMTL + MAC + PAC, child.df)
 
-se <- diag(sqrt(vcovHC(fit.final, "HC0")))[-1]
+se <- sqrt(diag(vcovHC(fit.final, "HC0")))[-1]
 fit.final.ci <- summ(fit.final, confint = T)$coeftable[-1,]
 
 ret.p <- 
@@ -217,15 +215,29 @@ ret.ci.wide <- ret.ci.wide[,name.order,with=F]
 changed.idx <- as.matrix(ret.ci.wide[, .SD, .SDcols = c("t", "adjust1")])
 changed.idx[changed.idx] <- 1; changed.idx[!changed.idx] <- -1
 changed.idx <- which(rowProds(changed.idx) != 1)
+```
 
+## Inference with misspecification adjustment
+
+```{r}
 # the unadjusted with sandwich
 kable(ret.ci.wide[, 1:6]) %>% 
   kable_styling("striped", full_width = F) %>%
   row_spec(changed.idx, bold = T, color = "white", background = "#D7261E")
+```
+
+## Simultaneous Inference with selection and misspecification adjustment
+
+```{r}
 # PoSI adjusted 
 kable(ret.ci.wide[, c(1, 7:11)]) %>% 
   kable_styling("striped", full_width = F) %>%
   row_spec(changed.idx, bold = T, color = "white", background = "#D7261E")
+```
+
+## Marginal Inference with selection and misspecification adjustment
+
+```{r}
 # PoSI1 adjusted
 kable(ret.ci.wide[, c(1, 12:16)]) %>% 
   kable_styling("striped", full_width = F) %>%
@@ -235,12 +247,12 @@ kable(ret.ci.wide[, c(1, 12:16)]) %>%
 
 ```{r plot}
 ret.ci %>%
-  filter(method %in% c("t", "berk", "adjust1")) %>%
+  filter(method %in% c("t", "adjust1")) %>%
   ggplot(aes(x = var, col = method)) +
   geom_errorbar(aes(ymin = lower, ymax = upper), position=position_dodge(0.6)) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   scale_color_manual(values = hue_pal()(4),
-                     labels = c("Naive", "PoSI", "Adjusted1")) +
+                     labels = c("Naive", "Adjusted1")) +
   xlab("") +
   ylab("") + 
   theme(legend.key=element_blank(),
