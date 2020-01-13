@@ -29,7 +29,7 @@ library(tmax)
 ```
 
 
-This file demonstrates PoSI on the Boston Housing data from @harrison1978hedonic with amendments by @gilley1996harrison.
+This file demonstrates PoSI on the Boston Housing data from @harrison1978hedonic with amendments by @gilley1996harrison. The original study intends to investigate the willingness to pay for clean by the "hedonic housing price equation" incorporating the level of air pollution, specifically the concentration of nitrogen oxides (NOX), as one attribute and concludes that "the valuation placed on a marginal improvement in air quality is quite sensitive to the specification of the hedonic housing value equation". In other words, NOX is a significant factor to the housing price controlling other covariates. The final housing value equation is chosen as the best fit after comparing models with transformations of both the repsonse (Median value of house prices) and covariates, which invalidates the classical inference. After our post-selection adjustment to the inference, the conclusion that NOX is a significant factor at 0.05 level to the housing price controlling for other covariates still holds, but the Charles River dummy and racial diversity become insignificant.
 
 # The Boston housing data
 The data description is as follows.
@@ -41,7 +41,7 @@ Variable     |  Description
  ZN          |  proportion of residential land zoned for lots over 25,000 sq. ft 
  INDUS       |  proportion of non-retail business acres 
  CHAS        |  Charles River dummy variable (=1 if tract bounds river; 0 otherwise) 
- NOX         |  nitric oxides concentration, pphm 
+ NOX         |  nitrogen oxides concentration, pphm 
  RM          |  average number of rooms per dwelling 
  AGE         |  proportion of owner-occupied units built prior to 1940 
  DIS         |  weighted distances to five Boston employment centers 
@@ -95,6 +95,18 @@ We provide PoSI adjustment considering the following transformations mentioned i
 * Log transformation of the response `MEDV`;
 * Grid search of Box-Cox transformation of the variable of interest `NOX`;
 * Log/linear/quadratic transformation of `RM`.
+
+Here are some model building procedures mentioned in the paper.
+
+* Page 86, line 10
+![](fig/Capture_Hednoic.PNG)
+
+* Page 86, line -9
+![](fig/Capture_Hednoic_2.PNG)
+
+* Page 96, TABLE IV
+![](fig/Capture_boston_rm.PNG)
+
 
 ```{r prep data}
 x <- data[, 1:(ncol(data)-1)]
@@ -158,7 +170,7 @@ x_$NOX <- box.cox(x$NOX, 2)
 x_$RM <- power.trans(x$RM, 2)
 
 fit <- lm(log_y~as.matrix(x_))
-se <- diag(sqrt(vcovHC(fit, "HC0")))[-1]
+se <- sqrt(diag(vcovHC(fit, "HC0")))[-1]
 fit.ci <- summ(fit, confint = T)$coeftable[-1,]
 
 
@@ -181,7 +193,23 @@ saveRDS(list(K_norm = K_norm, K_norm1 = K_norm1,
 
 # Report
 
-After PoSI or PoSI1 adjustment, `RIVER` and `BLK` change from siginificant at 0.05 level to insignificant. The conslusion for the variable of interest does not change.
+After PoSI or PoSI1 adjustment, `RIVER` and `BLK` change from significant at 0.05 level to insignificant. The conclusion for the variable of interest `NOX` does not change.
+
+Variable       |  Unadjusted | Adjusted  
+-------------  | ------- | -------
+NOX            |  &#10003; | &#10003;
+RM           | &#10003; | &#10003;
+AGE           | &#10007; | &#10007;
+CRIM            | &#10003; | &#10003;
+RES           | &#10007; | &#10007;
+INDUS            |  &#10007; | &#10007;
+$\color{red}{\text{RIVER}}$           | &#10003; | &#10007;
+TAX           | &#10003; | &#10003;
+PTR            | &#10003; | &#10003;
+$\color{red}{\text{BLK}}$           | &#10003; | &#10007;
+LSTAT            |  &#10003; | &#10003;
+DEMPC           | &#10003; | &#10003;
+DRADH           | &#10003; | &#10003;
 
 ```{r posi table}
 ret <- readRDS("boston_PoSI.RDS")
@@ -195,7 +223,7 @@ x_$NOX <- box.cox(x$NOX, 2)
 x_$RM <- power.trans(x$RM, 2)
 
 fit <- lm(log_y~as.matrix(x_))
-se <- diag(sqrt(vcovHC(fit, "HC0")))[-1]
+se <- sqrt(diag(vcovHC(fit, "HC0")))[-1]
 fit.ci <- summ(fit, confint = T)$coeftable[-1,]
 
 colnames(x) <- c("CRIM", "RES", "INDUS", "RIVER", "NOX", 
@@ -259,14 +287,27 @@ changed.idx <- as.matrix(ret.ci.wide[, .SD, .SDcols = c("t", "adjust1")])
 changed.idx[changed.idx] <- 1; changed.idx[!changed.idx] <- -1
 changed.idx <- which(rowProds(changed.idx) != 1)
 
+## Inference with misspecification adjustment
+
+```{r}
 # the unadjusted with sandwich
 kable(ret.ci.wide[, 1:6]) %>% 
   kable_styling("striped", full_width = F) %>%
   row_spec(changed.idx, bold = T, color = "white", background = "#D7261E")
+```
+
+## Simultaneous Inference with selection and misspecification adjustment
+
+```{r}
 # PoSI adjusted 
 kable(ret.ci.wide[, c(1, 7:11)]) %>% 
   kable_styling("striped", full_width = F) %>%
   row_spec(changed.idx, bold = T, color = "white", background = "#D7261E")
+```
+
+## Marginal Inference with selection and misspecification adjustment
+
+```{r}
 # PoSI1 adjusted
 kable(ret.ci.wide[, c(1, 12:16)]) %>% 
   kable_styling("striped", full_width = F) %>%
