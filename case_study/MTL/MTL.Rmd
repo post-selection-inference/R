@@ -1,0 +1,256 @@
+---
+title: "PoSI Case Study: Telomere Length Analysis"
+author: ''
+output:
+  html_document:
+    code_folding: show
+    highlight: haddock
+    theme: lumen
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+    number_sections: true
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+bibliography: bibliography.bib
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.path = "fig/")
+if (!require("pacman")) install.packages(pacman)
+pacman::p_load(data.table, sandwich, jtools, xtable, scales, dplyr, ggplot2, devtools, matrixStats, knitr, kableExtra)
+
+if (!require("tmax")) devtools::install_github(repo="post-selection-inference/R", subdir = "tmax")
+library(tmax)
+```
+
+
+This file demonstrates PoSI on the Telomere Length (TL) analysis by @nersisyan2019wgs. The goal of the analysis is to study the inheritance patterns and associated genetic factors. The data and scripts of their analyses are available on [Github](https://github.com/lilit-nersisyan/gonl_tqtl). Here we focus on the first part of the multiple linear regression (MLR) analysis to understand the TL inhereitance patterns.
+
+# MTL data
+
+There are in total 250 family trios in the original data. According to the article, two of the families with missing data for the mother were removed, and two families with discordant age differences at the time of data collection and at conception were also discarded. Hence there are 246 samples left in the `child.df` data. The description of the data is as follows.
+
+Variable       |  Description  
+-------------  |--------------------------------------------------------------------
+GoNL_Sample_ID | id of Genome of the Netherlands (GoNL) project 
+family         | family ID
+member         | family member (here are all children, `c`)
+Sex            | sex
+Age            | age
+MTL            | mean telomere length
+ageC           | NA
+MAC            | mother's age at conception
+PAC            | father's age at conception
+mMTL           | mother's mean telomere length
+fMTL           | father's mean telomere length
+mAge           | mother's age
+fAge           | father's age
+
+```{r read data}
+# phenotype data for children and parents 246 families
+load("gonl_tqtl-master/child.df.RData") 
+
+# final model
+fit.final <- lm(MTL ~ Age + mMTL + fMTL + MAC + PAC, child.df)
+
+# summary table of the final model
+summary(fit.final)
+# summary table of the final model with sandwich
+summ(fit.final, robust = "HC0")
+```
+
+
+```{r prep data}
+# fit.0 <- lm(MTL ~ (Sex + Age + mMTL + fMTL + MAC + PAC)^2, child.df)
+x <- model.matrix(MTL ~ (Sex + Age + mMTL + fMTL + MAC + PAC)^2, child.df)
+y <- child.df$MTL
+
+# final model
+M.final <- 3:7
+colnames(x)[M.final]
+
+p <- ncol(x) - 1
+nboot <- 1000
+```
+
+# PoSI
+
+We provide PoSI adjustment considering selection mentioned in @nersisyan2019wgs.
+
+* Variables: `Sex`, `Age`, `mMTL`, `fMTL`, `MAC`, and `PAC`;
+* Interactions: All pairwise interactions.
+
+```{r posi, eval=F}
+Hm <- matrix(NA, nrow = p, ncol = nboot)
+Hs <- matrix(NA, nrow = p, ncol = nboot)
+
+Hm1 <- matrix(NA, nrow = p, ncol = nboot)
+Hs1 <- matrix(NA, nrow = p, ncol = nboot)
+
+Hmp <- array(NA, c(p, nboot, p))
+Hsp <- array(NA, c(p, nboot, p))
+
+
+ks <- 1:p
+for(i in seq_along(ks)) {
+  k <- ks[i]
+  print(k)
+  tmp <- max_t_mul_boot_k(x[,-1], y, k,
+                          sandwich = T, return_sample = T, 
+                          Nboot = nboot, intercept = T,
+                          individual = 1:p)
+  Hs[i, ] <- colMax(tmp$BootSample)
+  Hm[i, ] <- colMax(tmp$BootRank)
+  
+  # Hs1[i, ] <- colMax(tmp$BootSample1)
+  # Hm1[i, ] <- colMax(tmp$BootRank1)
+  Hsp[i,,] <- t(tmp$BootSample1)
+  Hmp[i,,] <- t(tmp$BootRank1)
+  
+}
+
+# PoSI constant with prepivot
+K_norm <- get_T(x[,-1], y, M.final, NULL, Hm, maxk = p, Nboot = nboot, intercept = T, adjust = T)
+# PoSI1 constant with prepivot
+K_norm1 <- sapply(M.final, function(i) get_T(x[,-1], y, M.final, NULL, Hmp[,,i], maxk = p, Nboot = nboot, intercept = T, adjust = T))
+
+# adjusted p
+se <- diag(sqrt(vcovHC(fit.final, "HC0")))[-1]
+t.s <- coef(fit.final)[-1]/se
+pval_norm <- get_p(t.s, x[,-1], y, M.final, NULL, Hm, maxk = p, Nboot = nboot, intercept = T, adjust = T)
+pval_norm1 <- sapply(1:length(M.final), function(i) get_p(t.s[i], x[,-1], y, M.final, NULL, Hmp[,,M.final[i]], maxk = p, Nboot = nboot, intercept = T, adjust = T))
+
+saveRDS(list(K_norm = K_norm, K_norm1 = K_norm1,
+             pval_norm = pval_norm, pval_norm1 = pval_norm1),
+        "MTL_PoSI.RDS")
+```
+
+# Report
+
+After PoSI or PoSI1 adjustment, `AGE` and `MAC` change from siginificant at 0.05 level to insignificant.
+
+
+Variable       |  Unadjusted | Adjusted  
+-------------  | ------- | -------
+Age            |  &#10003; | &#10007;
+mMTL           | &#10003; | &#10003;
+fMTL           | &#10003; | &#10003;
+MAC            | &#10003; | &#10007;
+PAC            | &#10007; | &#10007;
+
+
+```{r posi table}
+ret <- readRDS("MTL_PoSI.RDS")
+K_norm <- ret$K_norm; K_norm1 <- ret$K_norm1
+pval_norm <- ret$pval_norm; pval_norm1 <- ret$pval_norm1
+
+fit.final <- lm(MTL ~ Age + mMTL + fMTL + MAC + PAC, child.df)
+
+se <- diag(sqrt(vcovHC(fit.final, "HC0")))[-1]
+fit.final.ci <- summ(fit.final, confint = T)$coeftable[-1,]
+
+ret.p <- 
+  data.table(var = factor(colnames(x)[M.final], 
+                          levels = colnames(x)[M.final]),
+             pval_t = summ(fit.final)$coeftable[-1, 4],
+             pval_adjust = pval_norm,
+             pval_adjust1 = pval_norm1)
+
+ret.ci <- 
+  data.table(var = factor(rep(colnames(x)[M.final], 3),
+                          levels = colnames(x)[M.final]),
+             method = factor(rep(c("t", "adjust", "adjust1"), 
+                                 each = length(M.final)),
+                             levels = c("t", "adjust", "adjust1")),
+             lower = c(fit.final.ci[,2], 
+                       fit.final$coefficients[-1] - K_norm * se,
+                       fit.final$coefficients[-1] - K_norm1 * se
+             ),
+             upper = c(fit.final.ci[,3], 
+                       fit.final$coefficients[-1] + K_norm * se,
+                       fit.final$coefficients[-1] + K_norm1 * se
+             )
+  )
+
+# xtable(ret.ci)
+ret.ci.wide <- dcast(ret.ci, var ~ method, value.var = c("lower", "upper"))
+name.order <- 1
+for(method in c("t", "adjust", "adjust1")) {
+  col.idx <- grep(paste0("^", method, "$"), 
+                  sapply(strsplit(names(ret.ci.wide), "_"), tail, 1))
+  ret.ci.wide[, eval(method)] <- 
+    Reduce("*", 
+           ret.ci.wide[, col.idx, 
+                       with=F]) > 0
+  name.order <- c(name.order, col.idx, ncol(ret.ci.wide))
+}
+ret.ci.wide <- ret.ci.wide[,name.order,with=F]
+
+ret.ci.wide <- dcast(ret.ci, var ~ method, value.var = c("lower", "upper"))
+name.order <- 1
+for(method in c("t","adjust", "adjust1")) {
+  col.idx <- grep(paste0("^", method, "$"), 
+                  sapply(strsplit(names(ret.ci.wide), "_"), tail, 1))
+  ret.ci.wide[, eval(method)] <- 
+    Reduce("*", 
+           ret.ci.wide[, col.idx, 
+                       with=F]) > 0
+  # name.order <- c(name.order, col.idx, ncol(ret.ci.wide))
+}
+ret.ci.wide$K_t <- 1.96
+ret.ci.wide$K_adjust <- K_norm
+ret.ci.wide$K_adjust1 <- K_norm1
+ret.ci.wide <- merge(ret.ci.wide, ret.p, by = "var")
+
+for(method in c("t","adjust", "adjust1")) {
+  col.idx <- grep(paste0("^", method, "$"), 
+                  sapply(strsplit(names(ret.ci.wide), "_"), tail, 1))
+  name.order <- c(name.order, col.idx)
+}
+ret.ci.wide <- ret.ci.wide[,name.order,with=F]
+
+changed.idx <- as.matrix(ret.ci.wide[, .SD, .SDcols = c("t", "adjust1")])
+changed.idx[changed.idx] <- 1; changed.idx[!changed.idx] <- -1
+changed.idx <- which(rowProds(changed.idx) != 1)
+
+# the unadjusted with sandwich
+kable(ret.ci.wide[, 1:6]) %>% 
+  kable_styling("striped", full_width = F) %>%
+  row_spec(changed.idx, bold = T, color = "white", background = "#D7261E")
+# PoSI adjusted 
+kable(ret.ci.wide[, c(1, 7:11)]) %>% 
+  kable_styling("striped", full_width = F) %>%
+  row_spec(changed.idx, bold = T, color = "white", background = "#D7261E")
+# PoSI1 adjusted
+kable(ret.ci.wide[, c(1, 12:16)]) %>% 
+  kable_styling("striped", full_width = F) %>%
+  row_spec(changed.idx, bold = T, color = "white", background = "#D7261E")
+```
+
+
+```{r plot}
+ret.ci %>%
+  filter(method %in% c("t", "berk", "adjust1")) %>%
+  ggplot(aes(x = var, col = method)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), position=position_dodge(0.6)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_color_manual(values = hue_pal()(4),
+                     labels = c("Naive", "PoSI", "Adjusted1")) +
+  xlab("") +
+  ylab("") + 
+  theme(legend.key=element_blank(),
+        legend.key.width = unit(1,"cm"),
+        legend.background=element_blank(),
+        legend.position = c(1, 0.85),
+        legend.direction = "vertical",
+        legend.justification="right",
+        legend.spacing.x = unit(0.05, 'in'),
+        legend.title = element_blank(), 
+        legend.text = element_text(size = 14),
+        axis.text.x = element_text(size = 14))
+```
