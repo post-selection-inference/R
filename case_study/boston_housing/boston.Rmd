@@ -286,6 +286,7 @@ ret.ci.wide <- ret.ci.wide[,name.order,with=F]
 changed.idx <- as.matrix(ret.ci.wide[, .SD, .SDcols = c("t", "adjust1")])
 changed.idx[changed.idx] <- 1; changed.idx[!changed.idx] <- -1
 changed.idx <- which(rowProds(changed.idx) != 1)
+```
 
 ## Inference with misspecification adjustment
 

@@ -2372,9 +2372,9 @@ I(box.cox(NOX, 2))
 <a class="sourceLine" id="cb7-71" title="71"></a>
 <a class="sourceLine" id="cb7-72" title="72">changed.idx &lt;-<span class="st"> </span><span class="kw">as.matrix</span>(ret.ci.wide[, .SD, <span class="dt">.SDcols =</span> <span class="kw">c</span>(<span class="st">&quot;t&quot;</span>, <span class="st">&quot;adjust1&quot;</span>)])</a>
 <a class="sourceLine" id="cb7-73" title="73">changed.idx[changed.idx] &lt;-<span class="st"> </span><span class="dv">1</span>; changed.idx[<span class="op">!</span>changed.idx] &lt;-<span class="st"> </span><span class="dv">-1</span></a>
-<a class="sourceLine" id="cb7-74" title="74">changed.idx &lt;-<span class="st"> </span><span class="kw">which</span>(<span class="kw">rowProds</span>(changed.idx) <span class="op">!=</span><span class="st"> </span><span class="dv">1</span>)</a>
-<a class="sourceLine" id="cb7-75" title="75"></a>
-<a class="sourceLine" id="cb7-76" title="76"><span class="co">## Inference with misspecification adjustment</span></a></code></pre></div>
+<a class="sourceLine" id="cb7-74" title="74">changed.idx &lt;-<span class="st"> </span><span class="kw">which</span>(<span class="kw">rowProds</span>(changed.idx) <span class="op">!=</span><span class="st"> </span><span class="dv">1</span>)</a></code></pre></div>
+<div id="inference-with-misspecification-adjustment" class="section level2">
+<h2><span class="header-section-number">3.1</span> Inference with misspecification adjustment</h2>
 <div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" title="1"><span class="co"># the unadjusted with sandwich</span></a>
 <a class="sourceLine" id="cb8-2" title="2"><span class="kw">kable</span>(ret.ci.wide[, <span class="dv">1</span><span class="op">:</span><span class="dv">6</span>]) <span class="op">%&gt;%</span><span class="st"> </span></a>
 <a class="sourceLine" id="cb8-3" title="3"><span class="st">  </span><span class="kw">kable_styling</span>(<span class="st">&quot;striped&quot;</span>, <span class="dt">full_width =</span> F) <span class="op">%&gt;%</span></a>
@@ -2665,8 +2665,9 @@ TRUE
 </tr>
 </tbody>
 </table>
+</div>
 <div id="simultaneous-inference-with-selection-and-misspecification-adjustment" class="section level2">
-<h2><span class="header-section-number">3.1</span> Simultaneous Inference with selection and misspecification adjustment</h2>
+<h2><span class="header-section-number">3.2</span> Simultaneous Inference with selection and misspecification adjustment</h2>
 <div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb9-1" title="1"><span class="co"># PoSI adjusted </span></a>
 <a class="sourceLine" id="cb9-2" title="2"><span class="kw">kable</span>(ret.ci.wide[, <span class="kw">c</span>(<span class="dv">1</span>, <span class="dv">7</span><span class="op">:</span><span class="dv">11</span>)]) <span class="op">%&gt;%</span><span class="st"> </span></a>
 <a class="sourceLine" id="cb9-3" title="3"><span class="st">  </span><span class="kw">kable_styling</span>(<span class="st">&quot;striped&quot;</span>, <span class="dt">full_width =</span> F) <span class="op">%&gt;%</span></a>
@@ -2959,7 +2960,7 @@ TRUE
 </table>
 </div>
 <div id="marginal-inference-with-selection-and-misspecification-adjustment" class="section level2">
-<h2><span class="header-section-number">3.2</span> Marginal Inference with selection and misspecification adjustment</h2>
+<h2><span class="header-section-number">3.3</span> Marginal Inference with selection and misspecification adjustment</h2>
 <div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb10-1" title="1"><span class="co"># PoSI1 adjusted</span></a>
 <a class="sourceLine" id="cb10-2" title="2"><span class="kw">kable</span>(ret.ci.wide[, <span class="kw">c</span>(<span class="dv">1</span>, <span class="dv">12</span><span class="op">:</span><span class="dv">16</span>)]) <span class="op">%&gt;%</span><span class="st"> </span></a>
 <a class="sourceLine" id="cb10-3" title="3"><span class="st">  </span><span class="kw">kable_styling</span>(<span class="st">&quot;striped&quot;</span>, <span class="dt">full_width =</span> F) <span class="op">%&gt;%</span></a>
