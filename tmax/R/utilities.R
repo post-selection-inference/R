@@ -156,7 +156,7 @@ max_t_mul_boot_k <- function(xx, yy, k,
     all_submodels <- apply(varlist, 1, function(k) {zz[k]=1;paste0(zz, collapse = "")})
   }
   
-  set.seed(123)
+  #set.seed(123)
   EE <- matrix(rnorm(nn*Nboot), nrow = nn, ncol = Nboot)
   boot_sample_C <- max_t_mul_boot_by_k(xx, yy, EE, sandwich, Nboot, varlist, individual)
   
@@ -192,7 +192,7 @@ max_t_mul_boot_M <- function(xx, yy, sandwich=TRUE, return_sample=TRUE,
   if(is.data.frame(xx)) xx <- as.matrix(xx)
   nn <- nrow(xx)
   
-  set.seed(123)
+  #set.seed(123)
   EE <- matrix(rnorm(nn*Nboot), nrow = nn, ncol = Nboot)
   xx <- xx[, M]
   if(intercept) xx <- cbind(1, xx)
@@ -224,7 +224,7 @@ maxt_posi <- function(xx, yy, maxk = ncol(xx), sandwich = TRUE, alpha = 0.05, Nb
   
   for(k in 1:maxk) {
     varlist <- gen_submodel_indices_k(k, p)
-    set.seed(123)
+    #set.seed(123)
     EE <- matrix(rnorm(n*Nboot), nrow = n, ncol = Nboot)
     tmax_ret <- tmax::max_t_mul_boot_by_k(xx, yy, EE, sandwich = sandwich, Nboot, varlist)
     maxt_0 <- pmax(maxt_0, colMax(tmax_ret$max_t))
