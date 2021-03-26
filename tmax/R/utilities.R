@@ -1,6 +1,6 @@
 # generate possible models given all variables
-gen_submodel_indices_k <- function(num_vars, total_vars, force_in=NULL) {
-  vars_to_choose <- setdiff(1:total_vars, force_in)
+gen_submodel_indices_k <- function(num_vars, total_vars, force_in=NULL, force_out=NULL) {
+  vars_to_choose <- setdiff(1:total_vars, c(force_in, force_out))
   num_vars_to_choose <- num_vars - length(force_in)
   ind_mat <- t(combn(vars_to_choose, num_vars_to_choose))
   if(is.null(force_in)) {return(ind_mat)}
@@ -130,7 +130,22 @@ max_t_mul_boot_sample_C <- function(xx, yy, opt, sandwich=TRUE, return_sample=TR
   return(ret)
 }
 
-# return maxt, beta, se, by model size k
+#' Return Max-T multiplier bootstrap sample of model of size $k$
+#' 
+#' @param xx The whole model matrix.
+#' @param yy Response vector.
+#' @param k Numeric. Model size.
+#' @param sandwhich Logical. If TRUE, the variance is obtained by the sandwich estimator; if FALSE, the variance is obtained by the model-based variance. TODO: bootstrap based se
+#' @param return_sample Logical. If TRUE, return all the bootstrap sample; if false, otherwise.
+#' @param force_in Index vector. Indices of variables to force in.
+#' @param Nboot Numeric. The number of bootstrap sample.
+#' @param intercept Logical. If TRUE, add an intercept to the model matrix.
+#' @param individual Index vector. Indices of variables that we want the individual Max-T bootstrap sample. (posi-1).
+#' @return model matrix xx, response vector yy, NumVars model size, coefficient estimate beta, standard eror of \hat\beta se, 
+## the vector of Max-T bootstrap sample BootSample, the vector of Max-T bootstrap sample ranking BootRank, 
+## the matrix of Max-T bootstrap sample BootSample of selected individual variables BootSample1, 
+## the matrix of Max-T bootstrap sample BootSample ranking of selected individual variables BootRank1, 
+## matrix of all models considered AllModelNames, bootstrap sample BootstrapSize
 max_t_mul_boot_k <- function(xx, yy, k, 
                              sandwich=TRUE, return_sample=TRUE, force_in=NULL, 
                              Nboot = 200, intercept = T, individual = NULL) {
@@ -186,7 +201,18 @@ max_t_mul_boot_k <- function(xx, yy, k,
 }
 
 
-# return maxt, beta, se, by model size opt$k
+#' Return Max-T multiplier bootstrap sample of model M
+#' 
+#' @param xx The whole model matrix.
+#' @param yy Response vector.
+#' @param sandwhich Logical. If TRUE, the variance is obtained by the sandwich estimator; if FALSE, the variance is obtained by the model-based variance. TODO: bootstrap based se
+#' @param return_sample Logical. If TRUE, return all the bootstrap sample; if false, otherwise.
+#' @param M Index vector. The indices of variables correspond to the model of interest.
+#' @param Nboot Numeric. The number of bootstrap sample.
+#' @param intercept Logical. If TRUE, add an intercept to the model matrix.
+#' @param individual Index vector. Indices of variables that we want the individual Max-T bootstrap sample. (posi-1).
+#' @return model matrix xx, response vector yy, model index M, coefficient estimate beta, standard eror of \hat\beta se, 
+## the matrix of T bootstrap sample BootSample, the vector of Max-T bootstrap sample BootSample BootSample1, bootstrap sample BootstrapSize
 max_t_mul_boot_M <- function(xx, yy, sandwich=TRUE, return_sample=TRUE,
                              M, Nboot = 200, intercept, individual=TRUE) {
   if(is.data.frame(xx)) xx <- as.matrix(xx)
