@@ -327,7 +327,23 @@ verextreme.posix <- function(x, y, C1Alpha, M){
   return(list(intervals.M = box, Volume.M = vol.M))
 }
 
-
+#' Get K for HPoSI
+#' 
+#' @param xx The design matrix 
+#' @param yy The response vector
+#' @param M The final model
+#' @param transformation 
+#' @param Hm max of rank in each bootstrap
+#' @param maxk max size of the model
+#' @param Nboot bootstrap size
+#' @param alpha
+#' @param intercept include intercept or not
+#' @param adjust HPoSI or not  
+#' @return Output a \code{two_stage} object
+#' \describe{
+#'   return K 
+#' }
+#' 
 get_T <- function(xx = NULL, 
                   yy = NULL, 
                   M = NULL,
